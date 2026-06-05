@@ -1,0 +1,144 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>WG Admin</title>
+  <link rel="stylesheet" href="/app.css?v=1780553058">
+</head>
+<body>
+  <div id="toast"></div>
+
+  <main>
+    <div class="topbar">
+      <h1>WG Admin <span id="vpnStatus" class="vpn-status vpn-unknown">●</span> <button id="refreshButton" class="refresh-link" onclick="refreshAll()" title="Refresh" aria-label="Refresh">↻</button></h1>
+      <button id="settingsButton" class="icon-button" onclick="toggleSettings()" title="Settings">⚙️</button>
+    </div>
+
+    <div class="header-spacer"></div>
+
+    <div class="tabs">
+      <button onclick="showTab('dashboardTab')" data-i18n="status">Status</button>
+      <button onclick="showTab('clientsTab')" data-i18n="clients">Clients</button>
+      <button onclick="showTab('activityTab')" data-i18n="logs">Logs</button>
+    </div>
+
+    <div id="dashboardTab">
+      <section id="dashboard" class="card">Loading...</section>
+    </div>
+
+    <div id="clientsTab" style="display:none">
+      <section class="card client-actions">
+        <button class="icon-button add-button" onclick="showCreateClient()" title="New Client" aria-label="New Client">+</button>
+        <button class="secondary parent-control-button" onclick="showParentalControl()">Родительский<br>контроль</button>
+        <button class="danger icon-button trash-button" onclick="showDeleteClient()" title="Delete Client"><svg class="trash-wire" viewBox="0 0 24 24" aria-hidden="true">
+<path d="M8 7h8"/>
+<path d="M10 7V5h4v2"/>
+<path d="M6.8 9h10.4l-.7 10.2a1.6 1.6 0 0 1-1.6 1.5H9.1a1.6 1.6 0 0 1-1.6-1.5L6.8 9z"/>
+<path d="M10 11.5v6"/>
+<path d="M14 11.5v6"/>
+</svg></button>
+      </section>
+<section id="peers"></section>
+    </div>
+
+    <div id="activityTab" style="display:none">
+      <section class="card">
+        <h2 data-i18n="logs">Logs</h2>
+
+        <div class="section-header">
+          <h3 data-i18n="trafficHistory">Traffic History</h3>
+          <select id="trafficHistoryPeriod" onchange="saveTrafficHistoryPeriod()">
+            <option value="week">Week</option>
+            <option value="month">Month</option>
+            <option value="total">Total</option>
+          </select>
+        </div>
+        <div id="trafficHistory">Loading...</div>
+
+        <hr>
+
+        <h3 data-i18n="activityLog">Activity Log</h3>
+        <div id="activity">Loading...</div>
+      </section>
+    </div>
+    <div id="settingsTab" class="settings-screen" style="display:none">
+      <section class="card settings-card">
+        <h2 data-i18n="settings">Settings</h2>
+
+        <div class="settings-tabs">
+          <button class="settings-subtab active-tab" onclick="showSettingsSubtab('settingsGeneral')" data-i18n="settingsGeneral">Основные</button>
+          <button class="settings-subtab" onclick="showSettingsSubtab('settingsBackups')" data-i18n="settingsBackups">Резервные<br>копии</button>
+          <button class="settings-subtab" onclick="showSettingsSubtab('settingsSecurity')" data-i18n="settingsSecurity">Безопасность</button>
+        </div>
+
+        <div id="settingsGeneral" class="settings-subtab-panel">
+          <div class="language-inline">
+            <h3 data-i18n="language">Language</h3>
+            <div class="language-row">
+              <button onclick="setLang('en')">English</button>
+              <button onclick="setLang('ru')">Русский</button>
+            </div>
+          </div>
+
+          <hr>
+          <h3 data-i18n="serverName">Server Name</h3>
+          <div class="row">
+            <input id="serverNameInput" type="text" placeholder="Family VPN">
+            <button onclick="saveServerName()" data-i18n="save">Save</button>
+          </div>
+
+          <hr>
+          <h3 data-i18n="apiToken">API Token</h3>
+          <div class="row">
+            <input id="token" type="password" placeholder="API token">
+            <button onclick="saveToken()" data-i18n="save">Save</button>
+          </div>
+          <hr>
+          <h3 data-i18n="maintenance">Maintenance</h3>
+          <button onclick="restartWgEasy()" data-i18n="restartVpnServer">Restart VPN Server</button>
+          <button onclick="restartWgAdmin()" data-i18n="restartControlPanel">Restart Control Panel</button>
+          <button class="danger" onclick="rebootServer()" data-i18n="rebootVps">Reboot VPS</button>
+
+          <div class="meta" data-i18n="maintenanceHint">VPN connection may be interrupted.</div>
+        </div>
+
+        <div id="settingsBackups" class="settings-subtab-panel" style="display:none">
+          <div class="backup-header">
+            <h3 data-i18n="backups">Резервные копии</h3>
+            <button class="backup-create-btn" onclick="createBackupNow()" data-i18n="create">Создать</button>
+          </div>
+
+          <div id="backupStatus" class="backup-placeholder" data-i18n="loading">Загрузка...</div>
+
+        </div>
+
+        <div id="settingsSecurity" class="settings-subtab-panel" style="display:none">
+          <h3>Безопасность</h3>
+          <p class="meta">Здесь позже появятся пароль резервных копий, шифрование архива и DNS-контроль.</p>
+          <div class="placeholder-card">Раздел в разработке</div>
+        </div>
+
+      </section>
+    </div>
+
+  </main>
+
+  <dialog id="modal">
+    <div id="modalContent"></div>
+    <button onclick="closeModal()" data-i18n="close">Close</button>
+  </dialog>
+
+  <div id="loginOverlay" class="overlay" style="display:none">
+    <div class="overlay-card">
+      <h3 data-i18n="apiToken">API Token</h3>
+      <p class="meta" data-i18n="loginHint">Введите API token для подключения к панели.</p>
+      <input id="loginTokenInput" type="password" placeholder="API token">
+      <button onclick="saveLoginToken()" data-i18n="save">Сохранить</button>
+    </div>
+  </div>
+
+  <script src="/app.js?v=1780553058"></script>
+
+</body>
+</html>

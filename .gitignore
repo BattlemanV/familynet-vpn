@@ -1,0 +1,29 @@
+# secrets
+api_token
+*.token
+.env
+.env.*
+
+# runtime data
+settings.json
+speed_limits.json
+traffic_stats.json
+traffic_stats.sqlite
+activity.log
+top_user_event.json
+
+# backups
+*.bak
+*.bak.*
+*.wgadmin
+*.tar.gz
+backups/
+restore-safety/
+
+# python
+venv/
+__pycache__/
+*.pyc
+
+# system
+.DS_Store

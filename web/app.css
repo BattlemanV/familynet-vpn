@@ -1,0 +1,878 @@
+body {
+  margin: 0;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  background: #111;
+  color: #eee;
+}
+
+main {
+  max-width: 760px;
+  margin: auto;
+  padding: 16px;
+}
+
+h1 {
+  margin-top: 8px;
+}
+
+.card {
+  background: #1c1c1e;
+  border-radius: 16px;
+  padding: 16px;
+  margin: 12px 0;
+}
+
+.peer {
+  background: #1c1c1e;
+  border-radius: 16px;
+  padding: 14px;
+  margin: 10px 0;
+}
+
+.name {
+  font-size: 18px;
+  font-weight: 700;
+}
+
+.meta {
+  color: #aaa;
+  font-size: 14px;
+  margin-top: 4px;
+}
+
+.online {
+  color: #30d158;
+}
+
+.offline {
+  color: #8e8e93;
+}
+
+button {
+  border: 0;
+  border-radius: 12px;
+  padding: 10px 12px;
+  margin: 6px 4px 0 0;
+  background: #0a84ff;
+  color: white;
+  font-weight: 600;
+}
+
+button.danger {
+  background: #8a4f4b;
+}
+
+button.secondary {
+  background: #3a3a3c;
+}
+
+input {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  border-radius: 12px;
+  padding: 12px;
+  background: #2c2c2e;
+  color: white;
+}
+
+.row {
+  display: flex;
+  gap: 8px;
+}
+
+pre {
+  white-space: pre-wrap;
+  word-break: break-word;
+  background: #000;
+  padding: 12px;
+  border-radius: 12px;
+}
+
+img.qr {
+  width: 100%;
+  max-width: 360px;
+  background: white;
+  padding: 12px;
+  border-radius: 12px;
+}
+
+dialog {
+  background: #1c1c1e;
+  color: #eee;
+  border: 0;
+  border-radius: 16px;
+  max-width: 92vw;
+}
+
+#toast {
+  position: fixed;
+  top: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: #2c2c2e;
+  color: white;
+  padding: 12px 16px;
+  border-radius: 12px;
+  display: none;
+  z-index: 9999;
+  box-shadow: 0 6px 20px rgba(0,0,0,.35);
+}
+
+.peer.status-online {
+  border-left: 4px solid #30d158;
+}
+
+.peer.status-offline {
+  border-left: 4px solid #8e8e93;
+}
+
+.peer.status-disabled {
+  border-left: 4px solid #ff453a;
+  opacity: 0.78;
+}
+
+.peer.status-disabled .name {
+  color: #ff6961;
+}
+
+.activity-item {
+  padding: 8px 0;
+  border-bottom: 1px solid #2c2c2e;
+}
+
+.activity-item:last-child {
+  border-bottom: 0;
+}
+
+.tabs {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+
+.tabs button {
+  flex: 1;
+}
+
+.client-actions {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.icon-button {
+  min-width: 44px;
+  font-size: 18px;
+}
+
+select {
+  width: 100%;
+  border: 0;
+  border-radius: 12px;
+  padding: 12px;
+  background: #2c2c2e;
+  color: white;
+  font-size: 16px;
+}
+
+#deleteClientId {
+  min-height: 170px;
+}
+
+.delete-list {
+  max-height: 360px;
+  overflow-y: auto;
+}
+
+.delete-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: center;
+  padding: 10px 0;
+  border-bottom: 1px solid #2c2c2e;
+}
+
+.delete-row:last-child {
+  border-bottom: 0;
+}
+
+.delete-row button {
+  margin: 0;
+}
+
+.settings-modal {
+  width: min(420px, 86vw);
+}
+
+.settings-modal h3 {
+  margin-top: 8px;
+}
+
+dialog {
+  width: min(460px, 92vw);
+  max-height: 82vh;
+  overflow-y: auto;
+  box-sizing: border-box;
+}
+
+dialog::backdrop {
+  background: rgba(0,0,0,.55);
+}
+
+
+.topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.topbar h1 {
+  margin: 8px 0;
+}
+
+.traffic-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 7px 0;
+  border-bottom: 1px solid #2c2c2e;
+}
+
+.traffic-row:last-child {
+  border-bottom: 0;
+}
+
+.section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.section-header h3 {
+  margin: 0;
+}
+
+.section-header select {
+  width: auto;
+  min-width: 120px;
+}
+
+.traffic-history-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: center;
+  padding: 9px 0;
+  border-bottom: 1px solid #2c2c2e;
+}
+
+.traffic-history-row:last-child {
+  border-bottom: 0;
+}
+
+.traffic-history-row > b {
+  white-space: nowrap;
+}
+
+.used {
+  color: #ff5f57;
+}
+
+.free {
+  color: #28c840;
+}
+
+.trash-button {
+  background: #0a84ff !important;
+  color: #000 !important;
+  display: inline-flex !important;
+  align-items: center;
+  justify-content: center;
+}
+
+.trash-button svg {
+  display: block;
+  width: 24px;
+  height: 24px;
+}
+
+
+.create-client-form input,
+
+
+#newClientName {
+  width: 100%;
+  box-sizing: border-box;
+}
+
+
+.percent-used {
+  color: #ff5f57;
+}
+
+.usage-low {
+  color: #28c840;
+}
+
+.usage-medium {
+  color: #ffcc00;
+}
+
+.usage-high {
+  color: #ff453a;
+}
+
+.refresh-link {
+  color: #888;
+  cursor: pointer;
+  font-size: 1.9em;
+  font-weight: normal;
+  margin-left: 6px; margin-right: 2px;
+  user-select: none;
+  vertical-align: middle;
+  background: transparent;
+  border: none;
+  padding: 0;
+}
+
+.refresh-link:hover {
+  color: #aaa;
+}
+
+.vpn-status {
+  font-size: 0.45em;
+  font-weight: 600;
+  vertical-align: middle;
+  margin-left: 6px;
+  margin-right: 2px;
+}
+
+.vpn-ok {
+  color: #22c55e;
+}
+
+.vpn-bad {
+  color: #ef4444;
+}
+
+.vpn-unknown {
+  color: #9ca3af;
+}
+
+.peer-activity-dot {
+  color: #22c55e;
+  font-size: 0.6em;
+  font-weight: 600;
+  line-height: 1;
+  vertical-align: middle;
+  margin-left: 6px;
+  margin-right: 2px;
+}
+
+.turtle-hot {
+  filter:
+    drop-shadow(0 0 4px rgba(255,220,0,0.9))
+    drop-shadow(0 0 8px rgba(255,140,0,0.9))
+    drop-shadow(0 0 12px rgba(255,80,0,0.8));
+}
+
+
+.trash-wire {
+  width: 30px;
+  height: 30px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.7;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.peer-actions {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  margin-top: 2px;
+}
+
+.peer-actions-left,
+.peer-actions-right {
+  display: flex;
+  align-items: center;
+}
+
+.peer-actions-right button {
+  margin-right: 0;
+}
+
+.trash-wire {
+  stroke: #fff !important;
+}
+
+.topbar .icon-button:hover {
+  opacity: 0.8;
+}
+
+.refresh-link {
+  font-size: 1.25rem !important;
+}
+
+.settings-button {
+  background: transparent !important;
+  color: #0a84ff !important;
+  padding: 0 !important;
+  margin: 0 !important;
+}
+
+.settings-wire {
+  width: 30px;
+  height: 30px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  display: block;
+}
+
+.peer-title-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+}
+
+.topbar .icon-button {
+  background: transparent !important;
+  color: #0a84ff !important;
+  border: 0;
+  padding: 0;
+  margin: 0;
+  font-size: 1.9em;
+}
+
+.trash-button:hover {
+  background: #ff453a !important;
+}
+
+.turtle-name-button {
+  transform: translateY(-4px);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin-left: 6px;
+  border: 0;
+  background: transparent;
+  padding: 0 2px;
+  min-width: 0;
+  height: 1em;
+  font-size: 1.3em;
+  line-height: 1;
+  vertical-align: middle;
+  cursor: pointer;
+}
+
+/* Compact header spacing */
+.topbar {
+  margin-bottom: 2px !important;
+}
+
+.tabs {
+  margin-top: 2px !important;
+  margin-bottom: 10px !important;
+}
+
+.topbar h1 {
+  margin-bottom: 2px !important;
+}
+
+/* Thin visual spacer between title and tabs */
+.header-spacer {
+  height: 6px;
+  margin: 4px 0 8px 0;
+  border-radius: 999px;
+  background: #1c1c1e;
+}
+
+.add-button {
+  background: #0a84ff !important;
+  color: #000 !important;
+  font-weight: 900;
+  font-size: 26px;
+  display: inline-flex !important;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  line-height: 1;
+}
+
+/* Active tab top line */
+.tabs button {
+  position: relative;
+}
+
+.tabs button.active-tab::before {
+  content: "";
+  position: absolute;
+  top: -6px;
+  left: 18%;
+  width: 64%;
+  height: 3px;
+  border-radius: 999px;
+  background: #0a84ff;
+}
+
+
+/* Settings active pill */
+
+/* Settings button active state */
+#settingsButton.settings-active {
+  padding: 0 2px !important;
+  border-radius: 999px !important;
+  background: rgba(10,132,255,.18) !important;
+  border: 2px solid #0a84ff !important;
+  color: #0a84ff !important;
+  outline: none !important;
+  box-shadow: none !important;
+}
+
+.parent-button {
+  background: #3a3a3c !important;
+  color: #fff !important;
+  font-size: 22px;
+  display: inline-flex !important;
+  align-items: center;
+  justify-content: center;
+}
+
+button[onclick="showParentalControl()"] {
+  min-width: 110px;
+  padding: 6px 10px !important;
+
+  line-height: 1.05;
+  font-size: 11px;
+
+  display: flex !important;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+
+  white-space: normal;
+}
+
+.parent-control-button {
+  min-width: 112px !important;
+  padding: 6px 10px !important;
+  line-height: 1.05 !important;
+  font-size: 11px !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  text-align: center !important;
+  white-space: normal !important;
+}
+
+.parent-control-button {
+  min-width: 112px !important;
+
+  font-size: 14px !important;
+  font-weight: 600 !important;
+  line-height: 1.05 !important;
+
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  text-align: center !important;
+
+  padding: 8px 10px !important;
+  white-space: normal !important;
+}
+
+/* Settings full-screen mode with internal tabs */
+.settings-screen {
+  width: 100%;
+}
+
+.settings-card {
+  margin-top: 0;
+}
+
+.settings-tabs {
+  display: flex;
+  gap: 8px;
+  margin: 12px 0 18px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid rgba(255,255,255,0.12);
+}
+
+.settings-tabs button {
+  position: relative;
+  flex: 1;
+  min-height: 42px;
+  padding: 8px 6px;
+  font-size: 13px;
+  line-height: 1.05;
+  border-radius: 14px;
+}
+
+.settings-tabs button.active-tab::before {
+  content: "";
+  position: absolute;
+  left: 14px;
+  right: 14px;
+  top: 4px;
+  height: 3px;
+  border-radius: 999px;
+  background: currentColor;
+  opacity: 0.9;
+}
+
+.settings-subtab-panel {
+  animation: settingsFade 0.12s ease-out;
+}
+
+.backup-placeholder,
+.placeholder-card {
+  border: 1px dashed rgba(255,255,255,0.22);
+  border-radius: 14px;
+  padding: 12px;
+  margin: 10px 0 14px;
+  opacity: 0.9;
+}
+
+@keyframes settingsFade {
+  from { opacity: 0; transform: translateY(3px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* Pull settings screen closer to topbar */
+#settingsTab .settings-card {
+  margin-top: -8px;
+}
+
+#settingsTab .settings-card h2 {
+  margin-top: 0;
+  margin-bottom: 8px;
+}
+
+#settingsTab .settings-tabs {
+  margin-top: 6px;
+}
+
+/* Language buttons in one row */
+
+
+/* Language selector */
+.language-row {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.language-row button {
+  flex: 1;
+  min-width: 120px;
+}
+
+/* Language title and buttons in one line */
+.language-inline {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.language-inline h3 {
+  margin: 0;
+  white-space: nowrap;
+}
+
+.language-inline .language-row {
+  display: flex;
+  gap: 8px;
+  flex-wrap: nowrap;
+  flex: 1;
+}
+
+.language-inline .language-row button {
+  flex: 1;
+  min-width: 0;
+  padding-left: 8px;
+  padding-right: 8px;
+}
+
+/* First login token overlay */
+#loginOverlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  align-items: center;
+  justify-content: center;
+  padding: 18px;
+  background: rgba(0,0,0,0.55);
+  backdrop-filter: blur(8px);
+}
+
+#loginOverlay 
+
+#loginOverlay input {
+  width: 100%;
+  box-sizing: border-box;
+}
+
+/* Backup header */
+
+
+/* Backup buttons */
+
+.backup-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.backup-actions button {
+  width: 100%;
+}
+
+.backup-restore {
+  margin-top: 18px;
+  padding-top: 12px;
+  border-top: 1px solid rgba(255,255,255,.12);
+}
+
+.backup-restore button {
+  width: 100%;
+}
+
+/* Backup header alignment fix */
+
+.backup-header {
+  display: flex;
+  align-items: center !important;
+  justify-content: space-between;
+}
+
+.backup-header h3 {
+  margin: 0 !important;
+  line-height: 1 !important;
+  display: flex;
+  align-items: center;
+}
+
+.backup-create-btn {
+  margin: 0 !important;
+  align-self: center;
+}
+
+.backup-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 0;
+}
+
+.backup-item + hr {
+  margin: 4px 0;
+}
+
+.backup-item-main {
+  min-width: 0;
+}
+
+.backup-download-btn {
+  flex-shrink: 0;
+  min-height: 30px;
+  padding: 5px 12px;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.backup-actions {
+  display: none !important;
+}
+
+/* Clean modal system */
+dialog#modal {
+  width: min(92vw, 420px) !important;
+  max-width: 420px !important;
+  max-height: 85vh !important;
+  overflow-y: auto !important;
+  box-sizing: border-box !important;
+  background: #1c1c1e;
+  color: #eee;
+  border: 0;
+  border-radius: 16px;
+  padding: 16px;
+}
+
+dialog#modal.create-client-modal {
+  width: min(92vw, 340px) !important;
+  max-width: 340px !important;
+}
+
+dialog#modal::backdrop {
+  background: rgba(0,0,0,.55);
+}
+
+#modalContent {
+  width: 100% !important;
+  max-width: 100% !important;
+  overflow: hidden !important;
+  box-sizing: border-box !important;
+}
+
+.create-client-input,
+.create-client-button {
+  width: 100% !important;
+  max-width: 100% !important;
+  min-width: 0 !important;
+  box-sizing: border-box !important;
+}
+
+.delete-row button {
+  width: auto !important;
+  max-width: none !important;
+  flex-shrink: 0 !important;
+}
+
+#modalContent img.qr,
+img.qr {
+  width: min(70vw, 240px) !important;
+  max-width: 240px !important;
+  height: auto !important;
+  display: block !important;
+  margin: 12px auto !important;
+  background: white;
+  padding: 12px;
+  border-radius: 12px;
+}
+
+dialog#modal > button[data-i18n="close"] {
+  width: 100% !important;
+  box-sizing: border-box !important;
+}
+
+/* Prevent iOS Safari zoom on input focus */
+input,
+select,
+textarea,
+button {
+  font-size: 16px !important;
+}
+
+/* Restore settings active ring */
+#settingsButton.settings-active {
+  padding: 0 2px !important;
+  border-radius: 999px !important;
+  background: rgba(10,132,255,.18) !important;
+  border: 2px solid #0a84ff !important;
+  color: #0a84ff !important;
+  outline: none !important;
+  box-shadow: none !important;
+}
