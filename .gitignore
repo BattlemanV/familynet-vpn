@@ -1,0 +1,36 @@
+# secrets
+api_token
+*.token
+.env
+.env.*
+
+# runtime data
+settings.json
+speed_limits.json
+parental_rules.json
+manual_overrides.json
+traffic_stats.json
+traffic_stats.sqlite
+activity.log
+top_user_event.json
+clients.json
+wg0.conf
+
+# backups
+*.bak
+*.bak.*
+*.wgadmin
+*.tar.gz
+backups/
+restore-safety/
+
+# python
+venv/
+__pycache__/
+*.pyc
+
+# deploy
+deploy-config.ps1
+
+# system
+.DS_Store
