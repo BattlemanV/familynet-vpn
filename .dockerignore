@@ -1,0 +1,10 @@
+.git
+__pycache__
+*.pyc
+*.swp
+*.swo
+*.md
+.gitignore
+.gitattributes
+api_token
+venv

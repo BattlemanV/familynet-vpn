@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+  <meta http-equiv="Pragma" content="no-cache">
+  <meta http-equiv="Expires" content="0">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+
+  <meta name="theme-color" content="#071016">
+  <link rel="manifest" href="/manifest.json">
+  <meta name="apple-mobile-web-app-title" content="FamilyNet">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <title>FamilyNet</title>
+  <style>#splash{position:fixed;inset:0;z-index:999;background:#071016;display:flex;align-items:center;justify-content:center;color:#4ade80;font-family:sans-serif;font-size:18px;flex-direction:column;gap:12px;transition:opacity .3s}#splash svg{width:144px;height:144px;animation:splashGrow 1.5s cubic-bezier(.34,1.56,.64,1) forwards}@keyframes splashGrow{0%{transform:scale(.15);opacity:0}60%{opacity:1}to{transform:scale(1);opacity:1}}main,nav{opacity:0;transition:opacity .15s}</style>
+  <script>var _v=Date.now();var _l=document.createElement('link');_l.rel='stylesheet';_l.href='/app.css?v='+_v;document.head.appendChild(_l);</script>
+</head>
+<body>
+  <div id="splash"><svg viewBox="0 0 64 64" width="128" height="128" xmlns="http://www.w3.org/2000/svg"><defs><linearGradient id="sg" x1="18" y1="18" x2="46" y2="48"><stop offset="0%" stop-color="#4ade80"/><stop offset="100%" stop-color="#16a34a"/></linearGradient></defs><path d="M32 8A24 24 0 0 1 56 32" fill="none" stroke="#22c55e" stroke-width="4" stroke-linecap="round"/><path d="M56 32A24 24 0 0 1 32 56" fill="none" stroke="#22c55e" stroke-width="4" stroke-linecap="round"/><path d="M32 56A24 24 0 0 1 8 32" fill="none" stroke="#22c55e" stroke-width="4" stroke-linecap="round"/><path d="M8 32A24 24 0 0 1 32 8" fill="none" stroke="#22c55e" stroke-width="4" stroke-linecap="round"/><circle cx="32" cy="8" r="4.5" fill="#0f172a" stroke="#4ade80" stroke-width="3"/><circle cx="56" cy="32" r="4.5" fill="#0f172a" stroke="#4ade80" stroke-width="3"/><circle cx="32" cy="56" r="4.5" fill="#0f172a" stroke="#4ade80" stroke-width="3"/><circle cx="8" cy="32" r="4.5" fill="#0f172a" stroke="#4ade80" stroke-width="3"/><path d="M20 31L32 20L44 31V47H35V38H29V47H20Z" fill="url(#sg)"/><rect x="27" y="32" width="5" height="5" rx="1" fill="#06120b"/><rect x="34" y="32" width="5" height="5" rx="1" fill="#06120b"/></svg></div>
+
+  <div id="toast" class="toast" role="alert"></div>
+
+  <main class="app-shell">
+    <section id="screenHome" class="screen active"></section>
+    <section id="screenDevices" class="screen"></section>
+    <section id="screenSettings" class="screen"></section>
+    <section id="screenPeer" class="screen details-screen"></section>
+    <section id="screenTraffic" class="screen details-screen"></section>
+    <section id="screenLimits" class="screen details-screen"></section>
+  </main>
+
+  <nav id="bottomNav" class="bottom-nav">
+    <button data-tab="home" onclick="showMain('home')"><span><svg viewBox="0 0 24 24" width="24" height="24" fill="none"><path d="M4.25 10.6 12 4.25l7.75 6.35" stroke="currentColor" stroke-width="2.15" stroke-linecap="round" stroke-linejoin="round"/><path d="M6.25 9.8v8.35c0 .88.72 1.6 1.6 1.6h8.3c.88 0 1.6-.72 1.6-1.6V9.8" stroke="currentColor" stroke-width="2.15" stroke-linecap="round" stroke-linejoin="round"/><path d="M9 11.75h2.15V13.9H9zM12.85 11.75H15V13.9h-2.15zM9 15.25h2.15v2.15H9zM12.85 15.25H15v2.15h-2.15z" fill="currentColor"/></svg></span><b data-i18n="home">Главная</b></button>
+    <button data-tab="devices" onclick="showMain('devices')"><span><svg viewBox="0 0 24 24" width="24" height="24" fill="none"><path d="M4.25 7.25c0-1.1.9-2 2-2h9.6c1.1 0 2 .9 2 2v6.6" stroke="currentColor" stroke-width="2.05" stroke-linecap="round" stroke-linejoin="round"/><path d="M3.5 16.4h10.2" stroke="currentColor" stroke-width="2.05" stroke-linecap="round" stroke-linejoin="round"/><path d="M5.6 18.75h8.1" stroke="currentColor" stroke-width="2.05" stroke-linecap="round" stroke-linejoin="round"/><rect x="14.6" y="10.25" width="5.9" height="9.5" rx="1.55" stroke="currentColor" stroke-width="2.05" stroke-linecap="round" stroke-linejoin="round"/><path d="M17.15 17.15h.8" stroke="currentColor" stroke-width="2.05" stroke-linecap="round"/></svg></span><b data-i18n="devices">Устройства</b></button>
+    <button data-tab="settings" onclick="showMain('settings')"><span><svg viewBox="0 0 24 24" width="24" height="24" fill="none"><circle cx="12" cy="12" r="7" stroke="currentColor" stroke-width="3.5" stroke-dasharray="1 4.5" stroke-linecap="round"/><circle cx="12" cy="12" r="5.25" stroke="currentColor" stroke-width="3.5"/><circle cx="12" cy="12" r="3" stroke="currentColor" stroke-width="1.5"/></svg></span><b data-i18n="settings">Настройки</b></button>
+  </nav>
+
+  <dialog id="modal"><div id="modalContent"></div></dialog>
+
+  <div id="loginOverlay" class="login-overlay" style="display:none">
+    <div class="login-card">
+      <h2 data-i18n="recoveryAccess">Recovery-доступ</h2>
+      <p data-i18n="loginHint">Введите recovery token для доступа разработчика.</p>
+      <input id="loginTokenInput" type="password" placeholder="Recovery token" aria-label="Recovery token">
+      <button onclick="saveLoginToken()" data-i18n="connect">Connect</button>
+    </div>
+  </div>
+
+  <input type="file" id="backupFileInput" accept=".wgadmin" style="display:none">
+
+  <script>var _s=document.createElement('script');_s.src='/app.js?v='+Date.now();document.body.appendChild(_s);</script>
+</body>
+</html>
