@@ -20,7 +20,6 @@ from pathlib import Path
 import datetime
 import tempfile
 from contextlib import asynccontextmanager
-from urllib.parse import quote
 
 import tarfile
 
@@ -2127,11 +2126,10 @@ def peer_config(client_id: str, x_api_token: Optional[str] = Header(default=None
 
     config = build_client_config(client_id)
     item = get_client(client_id)
-    name = item["client"].get("name", client_id)
     return Response(
         content=config,
         media_type="text/plain; charset=utf-8",
-        headers={"Content-Disposition": f'attachment; filename="{client_id}.conf"; filename*=UTF-8\'\'{quote(name+".conf",safe="")}'},
+        headers={"Content-Disposition": f'attachment; filename="{client_id}.conf"'},
     )
 
 @app.get("/peer/{client_id}/qr")
