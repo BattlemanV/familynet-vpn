@@ -1,0 +1,37 @@
+services:
+  wg-vpn:
+    image: wg-vpn-awg
+    build:
+      context: .
+      dockerfile: Dockerfile.awg
+    container_name: wg-vpn-awg
+    hostname: "${HOSTNAME}"
+    cap_add:
+      - NET_ADMIN
+      - SYS_MODULE
+    ports:
+      - "${AWG_PORT:-31121}:${AWG_PORT:-31121}/udp"
+      - "127.0.0.1:${API_PORT:-8000}:8000"
+    volumes:
+      - "./app.py:/app/app.py"
+      - "./web:/app/web"
+      - "./entrypoint-awg.sh:/entrypoint.sh"
+      - "wg-vpn-data:/data"
+    environment:
+      - WG_HOST=${WG_HOST:?err}
+      - WG_PORT=${AWG_PORT:-31121}
+      - WG_DNS=${WG_DNS:-1.1.1.1}
+      - WG_ALLOWED_IPS=${WG_ALLOWED_IPS:-0.0.0.0/0, ::/0}
+      - SERVER_HOSTNAME=${HOSTNAME}
+      - WG_INSIDE_CONTAINER=1
+      - ADMIN_BIND_HOST=10.8.0.1
+    restart: unless-stopped
+    networks:
+      - vpn-net
+
+volumes:
+  wg-vpn-data:
+
+networks:
+  vpn-net:
+    driver: bridge

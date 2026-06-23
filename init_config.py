@@ -12,6 +12,7 @@ WG_CONF = os.environ.get("WG_CONF", "/data/wg0.conf")
 
 SERVER_PORT = os.environ.get("WG_PORT", "51820")
 SERVER_ADDRESS = os.environ.get("WG_SERVER_ADDRESS", "10.8.0.1")
+WG_VARIANT = os.environ.get("WG_VARIANT", "wg")
 
 
 def resolve_external_iface() -> str:
@@ -71,6 +72,12 @@ def main():
         f.write(f"PrivateKey = {server_private}\n")
         f.write(f"Address = {SERVER_ADDRESS}/24\n")
         f.write(f"ListenPort = {SERVER_PORT}\n")
+        if WG_VARIANT == "awg":
+            f.write("Jc = 4\n")
+            f.write("Jmin = 10\n")
+            f.write("Jmax = 50\n")
+            f.write("S1 = 97\n")
+            f.write("S2 = 99\n")
         f.write(
             f"PostUp = iptables -A FORWARD -i %i -j ACCEPT; "
             f"iptables -t nat -A POSTROUTING -o {external_iface} -j MASQUERADE\n"

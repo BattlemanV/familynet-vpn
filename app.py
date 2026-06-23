@@ -172,6 +172,7 @@ if not WG_HOST:
 WG_PORT = os.environ.get("WG_PORT", "51820")
 WG_DNS = os.environ.get("WG_DNS", "1.1.1.1")
 WG_ALLOWED_IPS = os.environ.get("WG_ALLOWED_IPS", "0.0.0.0/0, ::/0")
+WG_VARIANT = os.environ.get("WG_VARIANT", "wg")
 ONLINE_THRESHOLD_SECONDS = int(os.environ.get("ONLINE_THRESHOLD_SECONDS", "1800"))
 SETTINGS_FILE = os.path.join(APP_DIR, "settings.json")
 TRAFFIC_DB_FILE = os.path.join(APP_DIR, "traffic_stats.sqlite")
@@ -272,6 +273,8 @@ def _sync_wg_peers():
     wg_lines.append(f"PrivateKey = {server.get('privateKey', '')}")
     wg_lines.append(f"Address = {server.get('address', '10.8.0.1')}/24")
     wg_lines.append(f"ListenPort = {WG_PORT}")
+    if WG_VARIANT == "awg":
+        wg_lines.extend(["Jc = 4", "Jmin = 10", "Jmax = 50", "S1 = 97", "S2 = 99"])
     external_iface = get_default_interface()
     wg_lines.append(f"PostUp = iptables -A FORWARD -i %i -j ACCEPT; iptables -t nat -A POSTROUTING -o {external_iface} -j MASQUERADE")
     wg_lines.append(f"PostDown = iptables -D FORWARD -i %i -j ACCEPT; iptables -t nat -D POSTROUTING -o {external_iface} -j MASQUERADE")
@@ -1595,10 +1598,14 @@ def build_client_config(client_id: str) -> str:
         f"PrivateKey = {client_private_key}",
         f"Address = {client_address}/32",
         f"DNS = {WG_DNS}",
-        "",
-        "[Peer]",
-        f"PublicKey = {server_public_key}",
     ]
+
+    if WG_VARIANT == "awg":
+        lines.extend(["Jc = 4", "Jmin = 10", "Jmax = 50", "S1 = 97", "S2 = 99"])
+
+    lines.append("")
+    lines.append("[Peer]")
+    lines.append(f"PublicKey = {server_public_key}")
 
     if client_preshared_key:
         lines.append(f"PresharedKey = {client_preshared_key}")

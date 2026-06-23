@@ -2,15 +2,74 @@
 
 ## Project
 
-FamilyNet VPN — self-hosted management panel for a family WireGuard VPN server.
+FamilyNet VPN — self-hosted management panel for a family VPN server supporting three transport variants.
 
 ## Runtime Environment
 
 - Ubuntu 24.04 LTS (host)
-- Docker (single container, standalone)
-- WireGuard (wg0, inside container)
+- Docker (one or more containers depending on variant)
 - FastAPI + Uvicorn
 - PWA frontend (vanilla JS)
+
+---
+
+## Installation Variants
+
+A user chooses one of three variants during install. Each shares the same FamilyNet management panel but uses a different VPN transport.
+
+| # | Variant | Speed | Obfuscation | Docker stack | Ports |
+|---|---------|-------|-------------|--------------|-------|
+| 1 | **wireguard** | high | none | `wg-vpn` (single) | 51820/udp |
+| 2 | **amnezia-wg** | medium | strong (AWG) | `wg-vpn` + `amnezia-awg` | 31121/udp |
+| 3 | **amnezia-xray** | lower | max (VLESS+XTLS) | `wg-vpn` + `amnezia-xray` | 8443/tcp |
+
+### Variant 1 — WireGuard (current)
+
+Straightforward WireGuard. No traffic obfuscation. Maximum throughput, minimal CPU overhead. Best for unrestricted regions or when raw speed is the priority.
+
+### Variant 2 — AmneziaWG
+
+Standard WireGuard tunnel wrapped inside AmneziaWG. The inner WG packet is encapsulated with an obfuscation layer that makes it indistinguishable from random UDP traffic. Good balance of speed and DPI bypass. Recommended for moderate censorship environments.
+
+### Variant 3 — Xray
+
+WireGuard traffic is routed through an Xray proxy (VLESS + XTLS Vision + TCP). The outer layer looks like a standard TLS connection. Highest bypass capability at the cost of reduced throughput and higher latency. Recommended for heavy censorship / China.
+
+### Install flow
+
+```
+curl -fsSL https://raw.githubusercontent.com/BattlemanV/familynet-vpn/main/install.sh | bash
+    │
+    ├── [1] WireGuard      → docker-compose.wg.yml   + entrypoint-wg.sh
+    ├── [2] AmneziaWG      → docker-compose.awg.yml  + entrypoint-awg.sh
+    └── [3] Xray           → docker-compose.xray.yml + entrypoint-xray.sh
+```
+
+All variants share:
+- `app.py` / `web/` — identical management panel
+- `/data` volume — same JSON/SQLite format
+- `api_token` — same auth mechanism
+
+### Network topology
+
+**Variant 1 (WireGuard):**
+```
+Client ── WG ──► wg0 (10.8.0.1) ──► Internet
+```
+
+**Variant 2 (AmneziaWG):**
+```
+Client ── AWG ──► amnezia-awg ──┬──► wg0 (10.8.0.1) ──► Internet
+                                └──► FastAPI :8000
+```
+
+**Variant 3 (Xray):**
+```
+Client ── Xray ──► amnezia-xray(:8443) ──┬──► wg0 (10.8.0.1) ──► Internet
+                                          └──► FastAPI :8000
+```
+
+In variants 2 and 3, the admin panel is still reached via WireGuard IP (10.8.0.1:8000). The external-facing service (AWG or Xray) proxies only client traffic; admin access remains through the internal WireGuard interface.
 
 ---
 

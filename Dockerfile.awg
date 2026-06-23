@@ -1,0 +1,32 @@
+FROM amneziavpn/amneziawg-go:latest
+
+RUN apk add --no-cache python3 py3-pip iptables ip6tables sudo curl bash
+
+WORKDIR /opt/wg-admin
+
+COPY requirements.txt .
+RUN pip3 install --no-cache-dir --break-system-packages -r requirements.txt
+
+COPY app.py .
+COPY init_config.py .
+COPY entrypoint-awg.sh .
+COPY web/ web/
+
+RUN chmod +x entrypoint-awg.sh
+
+ENV WG_INSIDE_CONTAINER=1
+ENV APP_DIR=/data
+ENV TOKEN_FILE=/data/api_token
+ENV WG_VARIANT=awg
+ENV WG_PORT=31121
+ENV AWG_PORT=31121
+
+VOLUME ["/data"]
+
+EXPOSE 8000
+EXPOSE 31121/udp
+
+HEALTHCHECK --interval=30s --timeout=10s --start-period=15s --retries=3 \
+  CMD curl -f http://10.8.0.1:8000/health || exit 1
+
+ENTRYPOINT ["/opt/wg-admin/entrypoint-awg.sh"]

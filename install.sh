@@ -14,9 +14,58 @@ set -e
 
 REPO="https://github.com/BattlemanV/familynet-vpn.git"
 INSTALL_DIR="/root/wg-admin-api"
-CONTAINER_NAME="wg-vpn"
-IMAGE_NAME="wg-vpn"
-WG_PORT="${WG_PORT:-51820}"
+
+# ── Variant selection ────────────────────────────────────────
+echo ""
+echo -e "${BOLD}${CYAN}Select VPN transport variant:${NC}"
+echo ""
+echo -e "  ${BOLD}[1]${NC} WireGuard      — ${GREEN}fastest${NC}, no obfuscation (port 51820/udp)"
+echo -e "  ${BOLD}[2]${NC} AmneziaWG      — ${YELLOW}balanced${NC}, traffic obfuscation (port 31121/udp)"
+echo -e "  ${BOLD}[3]${NC} Xray           — ${RED}max protection${NC}, TLS tunnel (port 8443/tcp)"
+echo ""
+
+read -p "$(echo -e "${CYAN}⌨${NC} Choose [1/2/3] (default: 1): ")" VARIANT
+VARIANT="${VARIANT:-1}"
+
+case "$VARIANT" in
+  2)
+    info "Selected: AmneziaWG"
+    CONTAINER_NAME="wg-vpn-awg"
+    IMAGE_NAME="wg-vpn-awg"
+    DOCKERFILE="Dockerfile.awg"
+    ENTRYPOINT="entrypoint-awg.sh"
+    WG_PORT="${WG_PORT:-31121}"
+    WG_EXTERNAL_PORT="$WG_PORT"
+    CONTAINER_PORT="$WG_PORT"
+    PROTO="udp"
+    CLIENT_APP="AmneziaWG"
+    ;;
+  3)
+    info "Selected: Xray"
+    CONTAINER_NAME="wg-vpn-xray"
+    IMAGE_NAME="wg-vpn-xray"
+    DOCKERFILE="Dockerfile.xray"
+    ENTRYPOINT="entrypoint-xray.sh"
+    WG_PORT="${WG_PORT:-8443}"
+    WG_EXTERNAL_PORT="8443"
+    CONTAINER_PORT="8443"
+    PROTO="tcp"
+    CLIENT_APP="Xray / V2Ray"
+    ;;
+  *)
+    info "Selected: WireGuard"
+    CONTAINER_NAME="wg-vpn"
+    IMAGE_NAME="wg-vpn"
+    DOCKERFILE="Dockerfile"
+    ENTRYPOINT="entrypoint.sh"
+    WG_PORT="${WG_PORT:-51820}"
+    WG_EXTERNAL_PORT="$WG_PORT"
+    CONTAINER_PORT="51820"
+    PROTO="udp"
+    CLIENT_APP="WireGuard"
+    ;;
+esac
+
 WG_HOST="${WG_HOST:-$(curl -fsSL ifconfig.me 2>/dev/null || curl -fsSL api.ipify.org 2>/dev/null || dig +short myip.opendns.com @resolver1.opendns.com 2>/dev/null)}"
 if [ -z "$WG_HOST" ]; then
     warn "Could not detect public IP automatically."
@@ -106,23 +155,27 @@ fi
 
 API_TOKEN=$(cat "$TOKEN_FILE")
 
-# ── 4. Build Docker image ──────────────────────────────────────
+# ── 4. Copy variant entrypoint ──────────────────────────────────
+cp "$INSTALL_DIR/$ENTRYPOINT" "$INSTALL_DIR/entrypoint.sh"
+ok "Entrypoint ready: $ENTRYPOINT"
+
+# ── 5. Build Docker image ──────────────────────────────────────
 info "Building Docker image (first build may take a minute)..."
-docker build -t "$IMAGE_NAME" "$INSTALL_DIR"
+docker build -t "$IMAGE_NAME" -f "$INSTALL_DIR/$DOCKERFILE" "$INSTALL_DIR"
 ok "Docker image built"
 
-# ── 5. Stop & remove old container ─────────────────────────────
+# ── 6. Stop & remove old container ─────────────────────────────
 docker stop "$CONTAINER_NAME" 2>/dev/null || true
 docker rm "$CONTAINER_NAME" 2>/dev/null || true
 
-# ── 6. Run container ───────────────────────────────────────────
+# ── 7. Run container ───────────────────────────────────────────
 info "Starting container..."
 docker run -d \
     --name "$CONTAINER_NAME" \
     --hostname "$(hostname)" \
     --cap-add NET_ADMIN \
     --cap-add SYS_MODULE \
-    -p "$WG_PORT":51820/udp \
+    -p "$WG_EXTERNAL_PORT":"$CONTAINER_PORT"/"$PROTO" \
     -p 127.0.0.1:"$API_PORT":8000 \
     -v "$INSTALL_DIR/app.py:/app/app.py" \
     -v "$INSTALL_DIR/web:/app/web" \
@@ -138,7 +191,7 @@ docker run -d \
 
 ok "Container started"
 
-# ── 7. Wait for API ────────────────────────────────────────────
+# ── 8. Wait for API ────────────────────────────────────────────
 info "Waiting for API to become ready..."
 for i in $(seq 1 30); do
     if docker exec "$CONTAINER_NAME" curl -sf -H "X-API-Token: $API_TOKEN" "http://10.8.0.1:8000/health" >/dev/null 2>&1; then
@@ -157,7 +210,7 @@ for i in $(seq 1 30); do
 done
 echo ""
 
-# ── 8. Create first admin user ─────────────────────────────────
+# ── 9. Create first admin user ─────────────────────────────────
 PEER_NAME="${PEER_NAME:-Admin}"
 
 EXISTING=$(docker exec "$CONTAINER_NAME" curl -sf -H "X-API-Token: $API_TOKEN" "http://10.8.0.1:8000/peers" | PEER_NAME="$PEER_NAME" python3 -c "
@@ -204,26 +257,27 @@ except: print('')
     fi
 fi
 
-# ── 9. Protect the admin user ──────────────────────────────────
+# ── 10. Protect the admin user ─────────────────────────────────
 # Disable deletion protection for admin (already protected by default in protected_peers)
 # Make sure the peer is enabled
 docker exec "$CONTAINER_NAME" curl -sf -X POST -H "X-API-Token: $API_TOKEN" \
     "http://10.8.0.1:8000/peer/$CLIENT_ID/enable" >/dev/null 2>&1 || true
 
-# ── 10. Show QR code ──────────────────────────────────────────
+# ── 11. Show QR code ──────────────────────────────────────────
 
 echo ""
 echo -e "${BOLD}${GREEN}╔══════════════════════════════════════════════════╗${NC}"
 echo -e "${BOLD}${GREEN}║        ✅ FamilyNet VPN is ready!                ║${NC}"
 echo -e "${BOLD}${GREEN}╚══════════════════════════════════════════════════╝${NC}"
 echo ""
-echo -e "  ${BOLD}Server:${NC}    $WG_HOST:$WG_PORT"
-echo -e "  ${BOLD}Panel:${NC}     http://$WG_HOST:$API_PORT  (via WireGuard)"
+echo -e "  ${BOLD}Variant:${NC}   $CONTAINER_NAME ($CLIENT_APP)"
+echo -e "  ${BOLD}Server:${NC}    $WG_HOST:$WG_PORT/$PROTO"
+echo -e "  ${BOLD}Panel:${NC}     http://$WG_HOST:$API_PORT  (via VPN)"
 echo -e "  ${BOLD}Admin user:${NC} $PEER_NAME"
 echo ""
 
 if command -v qrencode &>/dev/null; then
-    echo -e "  ${BOLD}Scan QR in WireGuard app:${NC}"
+    echo -e "  ${BOLD}Scan QR in $CLIENT_APP app:${NC}"
     echo ""
     QR_DATA=$(docker exec "$CONTAINER_NAME" curl -sf -H "X-API-Token: $API_TOKEN" \
         "http://10.8.0.1:8000/peer/$CLIENT_ID/config" 2>/dev/null || echo "")
@@ -236,7 +290,7 @@ fi
 
 echo -e "${BOLD}${CYAN}── Next steps ──────────────────────────────────────${NC}"
 echo ""
-echo -e "  ${BOLD}1.${NC} Scan the QR code above in your WireGuard app"
+echo -e "  ${BOLD}1.${NC} Scan the QR code above in your $CLIENT_APP app"
 echo -e "  ${BOLD}2.${NC} Connect to the VPN"
 echo -e "  ${BOLD}3.${NC} Open the admin panel:"
 echo -e "     ${CYAN}http://$WG_HOST:$API_PORT${NC}"
