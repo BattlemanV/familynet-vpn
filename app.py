@@ -1943,7 +1943,10 @@ def create_token(
 
     label = str(payload.get("label", "")).strip() or "Unnamed"
     new_id = str(uuid.uuid4())[:8]
-    new_token = secrets.token_hex(32)
+    # Accept user-provided password or generate one
+    new_token = str(payload.get("password", "")).strip()
+    if not new_token:
+        new_token = secrets.token_hex(32)
     tokens = _read_tokens_raw()
     tokens.append({
         "id": new_id,

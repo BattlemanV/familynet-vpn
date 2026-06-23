@@ -7,7 +7,7 @@ set -e
 # What it does:
 #   1. Installs Docker
 #   2. Clones the repo
-#   3. Generates a recovery token (developer/SSH access)
+#   3. Prompts for admin password
 #   4. Builds & starts the container
 #   5. Creates the first admin user (protected)
 #   6. Shows QR code for mobile config
@@ -144,13 +144,34 @@ else
 fi
 ok "Repository ready at $INSTALL_DIR"
 
-# ── 3. Generate recovery token (developer/SSH access) ─────────
+# ── 3. Create admin password ─────────────────────────────────────
 TOKEN_FILE="$INSTALL_DIR/api_token"
 if [ ! -f "$TOKEN_FILE" ] || [ ! -s "$TOKEN_FILE" ]; then
-    openssl rand -hex 32 > "$TOKEN_FILE"
+    echo ""
+    echo -e "  ${CYAN}Create an admin password for the web panel.${NC}"
+    echo -e "  ${YELLOW}It will be used to log into the admin interface.${NC}"
+    echo ""
+    while :; do
+        read -s -p "$(echo -e "${CYAN}⌨${NC} Enter admin password: ")" ADMIN_PASS
+        echo ""
+        if [ -z "$ADMIN_PASS" ]; then
+            echo -e "  ${YELLOW}Password cannot be empty.${NC}"
+            continue
+        fi
+        read -s -p "$(echo -e "${CYAN}⌨${NC} Confirm password: ")" ADMIN_PASS2
+        echo ""
+        if [ "$ADMIN_PASS" != "$ADMIN_PASS2" ]; then
+            echo -e "  ${YELLOW}Passwords do not match. Try again.${NC}"
+            continue
+        fi
+        break
+    done
+    echo ""
+    echo "$ADMIN_PASS" > "$TOKEN_FILE"
     chmod 600 "$TOKEN_FILE"
+    ok "Admin password saved"
 else
-    ok "Recovery token already exists"
+    ok "Admin password already exists"
 fi
 
 API_TOKEN=$(cat "$TOKEN_FILE")
@@ -202,7 +223,7 @@ for i in $(seq 1 30); do
         echo ""
         warn "API didn't respond in time. Check 'docker logs $CONTAINER_NAME'"
         echo ""
-        echo "Recovery token saved at: $TOKEN_FILE"
+        echo "Admin password saved at: $TOKEN_FILE"
         exit 1
     fi
     printf "."
@@ -251,7 +272,7 @@ except: print('')
             "http://10.8.0.1:8000/peer/$CLIENT_ID/role" >/dev/null 2>&1 || true
     else
         warn "Failed to create peer. You can do it manually via the panel."
-        echo "Recovery token saved at: $TOKEN_FILE"
+        echo "Admin password saved at: $TOKEN_FILE"
         echo "Panel (via VPN): http://10.8.0.1:8000"
         exit 0
     fi
@@ -295,10 +316,10 @@ echo -e "  ${BOLD}2.${NC} Connect to the VPN"
 echo -e "  ${BOLD}3.${NC} Open the admin panel:"
 echo -e "     ${CYAN}http://$WG_HOST:$API_PORT${NC}"
 echo ""
-echo -e "  ${BOLD}No password or token required${NC} — you are"
-echo -e "  automatically recognized as administrator via VPN."
+echo -e "  ${BOLD}Use your admin password${NC} to log into the panel."
+echo -e "  You will be prompted the first time you open it."
 echo ""
-echo -e "${BOLD}${YELLOW}── Recovery token (emergency / SSH only) ──────────${NC}"
+echo -e "${BOLD}${YELLOW}── Admin password ─────────────────────────────────${NC}"
 echo ""
 echo -e "  ${YELLOW}File:${NC} $TOKEN_FILE"
 echo -e "  ${YELLOW}Use:${NC}  X-API-Token header or ?token= query param"
