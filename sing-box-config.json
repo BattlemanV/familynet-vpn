@@ -1,0 +1,35 @@
+{
+  "log": {
+    "level": "info"
+  },
+  "inbounds": [
+    {
+      "type": "tun",
+      "tag": "tun-in",
+      "inet4_address": "198.18.0.1/30",
+      "auto_route": true
+    }
+  ],
+  "outbounds": [
+    {
+      "type": "vless",
+      "tag": "proxy",
+      "server": "147.45.169.35",
+      "server_port": 8445,
+      "uuid": "f98da36f-54b3-419b-8066-db8fa98cb517",
+      "packet_encoding": "xudp",
+      "transport": {
+        "type": "httpupgrade",
+        "path": "/vless"
+      }
+    },
+    {
+      "type": "direct",
+      "tag": "direct"
+    }
+  ],
+  "route": {
+    "final": "proxy",
+    "auto_detect_interface": true
+  }
+}

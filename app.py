@@ -1575,7 +1575,33 @@ def delete_peer(client_id: str) -> Dict[str, Any]:
         "backup": backup_path,
     }
 
+def build_xray_links(client_id: str) -> Dict[str, str]:
+    uuid_file = "/data/uuid"
+    reality_pub_file = "/data/reality_public"
+
+    uuid = "f98da36f-54b3-419b-8066-db8fa98cb517"
+    if os.path.exists(uuid_file):
+        uuid = open(uuid_file).read().strip()
+
+    pbk = ""
+    if os.path.exists(reality_pub_file):
+        pbk = open(reality_pub_file).read().strip()
+
+    host = WG_HOST or "147.45.169.35"
+    short_id = "d64cc26c"
+
+    links = {
+        "reality": f"vless://{uuid}@{host}:443?type=tcp&security=reality&pbk={pbk}&fp=chrome&sni=www.microsoft.com&sid={short_id}&flow=xtls-rprx-vision#REALITY",
+        "xhttp": f"vless://{uuid}@{host}:8445?type=xhttp&path=%2Fvless&security=none#XHTTP",
+        "ws": f"vless://{uuid}@{host}:8444?type=ws&path=%2Fvless&security=none#WS",
+    }
+    return links
+
 def build_client_config(client_id: str) -> str:
+    if WG_VARIANT == "xray":
+        links = build_xray_links(client_id)
+        return links.get("ws", "")
+
     item = get_client(client_id)
     data = item["data"]
     client = item["client"]
@@ -2136,10 +2162,13 @@ def peer_config(client_id: str, x_api_token: Optional[str] = Header(default=None
 
     config = build_client_config(client_id)
     item = get_client(client_id)
+    fname = f"{client_id}.conf"
+    if WG_VARIANT == "xray":
+        fname = f"{client_id}.txt"
     return Response(
         content=config,
         media_type="text/plain; charset=utf-8",
-        headers={"Content-Disposition": f'attachment; filename="{client_id}.conf"'},
+        headers={"Content-Disposition": f'attachment; filename="{fname}"'},
     )
 
 @app.get("/peer/{client_id}/qr")
@@ -2150,6 +2179,11 @@ def peer_qr(client_id: str, x_api_token: Optional[str] = Header(default=None), t
     buffer = io.BytesIO()
     img.save(buffer, format="PNG")
     return Response(content=buffer.getvalue(), media_type="image/png")
+
+@app.get("/xray/links")
+def xray_links(x_api_token: Optional[str] = Header(default=None), token: Optional[str] = Query(default=None)):
+    links = build_xray_links("")
+    return links
 
 @app.get("/peer/{client_id}/traffic/days")
 def peer_traffic_days(client_id: str, x_api_token: Optional[str] = Header(default=None)) -> Dict[str, Any]:

@@ -27,11 +27,14 @@ ENV TOKEN_FILE=/data/api_token
 ENV WG_VARIANT=xray
 ENV WG_PORT=51821
 ENV XRAY_PORT=8443
+ENV REALITY_PORT=443
 
 VOLUME ["/data"]
 
 EXPOSE 8000
+EXPOSE 443/tcp
 EXPOSE 8443/tcp
+EXPOSE 8445/tcp
 
 HEALTHCHECK --interval=30s --timeout=10s --start-period=15s --retries=3 \
   CMD curl -f http://10.8.0.1:8000/health || exit 1

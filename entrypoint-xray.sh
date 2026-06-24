@@ -14,6 +14,7 @@ WG_CONF="$DATA_DIR/wg0.conf"
 XRAY_CONF="$DATA_DIR/xray.json"
 
 XRAY_PORT="${XRAY_PORT:-8443}"
+REALITY_PORT="${REALITY_PORT:-443}"
 
 resolve_external_iface() {
     local iface
@@ -48,49 +49,94 @@ iptables -t nat -C POSTROUTING -o "${EXTERNAL_IFACE}" -j MASQUERADE 2>/dev/null 
 
 if [ ! -f "$XRAY_CONF" ]; then
     echo "Generating Xray config..."
-    UUID=$(cat /proc/sys/kernel/random/uuid 2>/dev/null || python3 -c "import uuid; print(uuid.uuid4())")
 
-    CERT_DIR="$DATA_DIR/xray-certs"
-    mkdir -p "$CERT_DIR"
-    if [ ! -f "$CERT_DIR/fullchain.pem" ]; then
-        openssl req -x509 -nodes -days 3650 -newkey ec -pkeyopt ec_paramgen_curve:prime256v1 \
-            -keyout "$CERT_DIR/key.pem" -out "$CERT_DIR/fullchain.pem" \
-            -subj "/CN=familynet-vpn" 2>/dev/null
-    fi
+    UUID=$(cat /proc/sys/kernel/random/uuid 2>/dev/null || python3 -c "import uuid; print(uuid.uuid4())")
+    echo "$UUID" > "$DATA_DIR/uuid"
+
+    REALITY_KEYS=$(xray x25519)
+    REALITY_PRIVATE=$(echo "$REALITY_KEYS" | grep "PrivateKey" | awk '{print $NF}')
+    REALITY_PUBLIC=$(echo "$REALITY_KEYS" | grep "Password" | awk '{print $NF}')
+    echo "$REALITY_PUBLIC" > "$DATA_DIR/reality_public"
+    SHORT_ID=$(openssl rand -hex 4)
 
     cat > "$XRAY_CONF" <<XRAYEOF
 {
   "log": {"loglevel": "warning"},
-  "inbounds": [{
-    "port": ${XRAY_PORT},
-    "protocol": "vless",
-    "settings": {
-      "clients": [{"id": "${UUID}", "flow": "xtls-rprx-vision"}],
-      "decryption": "none"
+  "inbounds": [
+    {
+      "port": ${REALITY_PORT},
+      "protocol": "vless",
+      "settings": {
+        "clients": [{"id": "${UUID}", "flow": "xtls-rprx-vision"}],
+        "decryption": "none"
+      },
+      "streamSettings": {
+        "network": "tcp",
+        "security": "reality",
+        "realitySettings": {
+          "show": false,
+          "dest": "www.microsoft.com:443",
+          "xver": 0,
+          "serverNames": ["www.microsoft.com"],
+          "privateKey": "${REALITY_PRIVATE}",
+          "maxTimeDiff": 0,
+          "shortIds": ["${SHORT_ID}"]
+        }
+      },
+      "sniffing": {"enabled": true, "destOverride": ["http", "tls"]}
     },
-    "streamSettings": {
-      "network": "tcp",
-      "security": "tls",
-      "tlsSettings": {
-        "certificates": [{
-          "certificateFile": "${CERT_DIR}/fullchain.pem",
-          "keyFile": "${CERT_DIR}/key.pem"
-        }]
-      }
+    {
+      "port": ${XRAY_PORT},
+      "protocol": "vless",
+      "settings": {
+        "clients": [{"id": "${UUID}"}],
+        "decryption": "none"
+      },
+      "streamSettings": {
+        "network": "ws",
+        "security": "none",
+        "wsSettings": {"path": "/vless"}
+      },
+      "sniffing": {"enabled": true, "destOverride": ["http", "tls"]}
     },
-    "sniffing": {
-      "enabled": true,
-      "destOverride": ["http", "tls"]
+    {
+      "port": 8445,
+      "protocol": "vless",
+      "settings": {
+        "clients": [{"id": "${UUID}"}],
+        "decryption": "none"
+      },
+      "streamSettings": {
+        "network": "xhttp",
+        "security": "none",
+        "xhttpSettings": {"path": "/vless"}
+      },
+      "sniffing": {"enabled": true, "destOverride": ["http", "tls"]}
     }
-  }],
-  "outbounds": [{
-    "protocol": "freedom",
-    "tag": "direct"
-  }]
+  ],
+  "outbounds": [
+    {
+      "protocol": "freedom",
+      "tag": "direct",
+      "settings": {"domainStrategy": "UseIP"}
+    },
+    {
+      "protocol": "blackhole",
+      "tag": "block"
+    }
+  ],
+  "routing": {
+    "domainStrategy": "IPIfNonMatch",
+    "rules": [
+      {"type": "field", "outboundTag": "direct", "network": "tcp,udp"}
+    ]
+  }
 }
 XRAYEOF
     chmod 600 "$XRAY_CONF"
     echo "Xray UUID: $UUID"
+    echo "REALITY public key: $REALITY_PUBLIC"
+    echo "REALITY shortId: $SHORT_ID"
 fi
 
 nohup xray run -c "$XRAY_CONF" > /tmp/xray.log 2>&1 &
