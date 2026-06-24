@@ -1,35 +1,42 @@
 # FamilyNet VPN
 
-Self-hosted management panel for a family WireGuard VPN server.
+Self-hosted VPN management panel with 3 protection tiers: WireGuard, AmneziaWG, and Xray (REALITY + XHTTP + WS).
 
 ## Quick Start
-
-After installation:
-
-```
- 1. Connect to WireGuard
- 2. Open http://10.8.0.1:8000
-```
-
-**No password or token required.** If you are an admin VPN peer — the panel opens immediately.
 
 ```bash
 bash <(curl -fsSL https://raw.githubusercontent.com/BattlemanV/familynet-vpn/main/install.sh)
 ```
 
----
+Choose one of three variants during install:
+
+| Tier | Port | Protocol | Best for |
+|------|------|----------|----------|
+| **1 — WireGuard** | 51820/udp | WG | Any device, max speed |
+| **2 — AmneziaWG** | 31121/udp | AWG (obfuscated) | DPI-bypass, AmneziaVPN |
+| **3 — Xray** | 443/tcp | REALITY | Windows/Android/macOS |
+| | 8445/tcp | XHTTP | iOS (Hiddify) |
+| | 8444/tcp | WS | iOS fallback |
+
+After installation, open the panel via VPN:
+
+```
+ 1. Connect to VPN (scan the QR shown after install)
+ 2. Open http://10.8.0.1:8000
+```
+
+**No password or token required** for admin VPN peers. A recovery token is stored on the server for emergency access.
 
 ## Features
 
-- Client management (create/delete/rename)
-- QR codes and WireGuard configs
+- Client management (create/delete/rename/enable/disable)
+- QR codes and config download (WG, AWG, and Xray VLESS links)
 - Roles (admin / user)
-- Traffic statistics (today, week, month, all time)
+- Traffic statistics (today, week, month, year)
 - Activity log
 - Backup / restore (tar.gz, auto on changes, upload max 100MB)
 - Speed limits (symmetrical, upload + download)
 - Parental control (daily limits, schedule, throttle)
-- Manual override (slow mode / disable overrides parental)
 - Online / offline indicator
 - CPU, RAM, disk, uptime monitoring
 - VPS reboot / WireGuard restart / panel restart
@@ -46,21 +53,20 @@ bash <(curl -fsSL https://raw.githubusercontent.com/BattlemanV/familynet-vpn/mai
 
 ## Stack
 
-- Docker (single container, python:3.11-slim)
-- WireGuard
+- Docker (python:3.11-slim)
+- WireGuard / AmneziaWG / Xray-core
 - FastAPI + Uvicorn
 - PWA frontend (vanilla JS)
 - SQLite (traffic history)
 
-## Security
+## Documentation
 
-VPN-first architecture. The API binds to `10.8.0.1:8000` (WireGuard interface) only. No public exposure, no reverse proxy, no domain required. Admin access is granted by being an admin VPN peer — no password, no token for normal usage. A recovery token is generated for SSH/developer emergency access only.
-
-## Quick Install
-
-```bash
-bash <(curl -fsSL https://raw.githubusercontent.com/BattlemanV/familynet-vpn/main/install.sh)
-```
+- [ARCHITECTURE.md](ARCHITECTURE.md) — 3-tier architecture
+- [CONNECT.ru.md](CONNECT.ru.md) — connection guide (Russian)
+- [INSTALLATION.md](INSTALLATION.md) — installation details
+- [API.md](API.md) — API endpoints
+- [CHANGELOG.md](CHANGELOG.md) — changelog
+- [DATA-FORMATS.md](DATA-FORMATS.md) — data formats
 
 ## Russian
 

@@ -20,8 +20,8 @@ A user chooses one of three variants during install. Each shares the same Family
 | # | Variant | Speed | Obfuscation | Docker stack | Ports |
 |---|---------|-------|-------------|--------------|-------|
 | 1 | **wireguard** | high | none | `wg-vpn` (single) | 51820/udp |
-| 2 | **amnezia-wg** | medium | strong (AWG) | `wg-vpn` + `amnezia-awg` | 31121/udp |
-| 3 | **amnezia-xray** | lower | max (VLESS+XTLS) | `wg-vpn` + `amnezia-xray` | 8443/tcp |
+| 2 | **amnezia-wg** | medium | strong (AWG) | `familynet-vpn-awg` (single) | 31121/udp |
+| 3 | **xray** | lower | max (VLESS+REALITY) | `familynet-vpn-xray` (single) | 443/tcp (REALITY), 8445/tcp (XHTTP), 8444/tcp (WS) |
 
 ### Variant 1 — WireGuard (current)
 
@@ -33,7 +33,10 @@ Standard WireGuard tunnel wrapped inside AmneziaWG. The inner WG packet is encap
 
 ### Variant 3 — Xray
 
-WireGuard traffic is routed through an Xray proxy (VLESS + XTLS Vision + TCP). The outer layer looks like a standard TLS connection. Highest bypass capability at the cost of reduced throughput and higher latency. Recommended for heavy censorship / China.
+Xray-core with three parallel inbounds:
+- **REALITY** (port 443) — VLESS + XTLS Vision + REALITY. The outer layer looks like a standard HTTPS connection to `www.microsoft.com`. Maximum bypass capability. Works on Windows, Android, macOS.
+- **XHTTP** (port 8445) — VLESS + XHTTP (HTTP/2 cleartext). Fallback for iOS clients (Hiddify) where REALITY is broken.
+- **WS** (port 8444) — VLESS + WebSocket. Universal fallback, works with AmneziaVPN and Hiddify on iOS.
 
 ### Install flow
 
@@ -59,17 +62,18 @@ Client ── WG ──► wg0 (10.8.0.1) ──► Internet
 
 **Variant 2 (AmneziaWG):**
 ```
-Client ── AWG ──► amnezia-awg ──┬──► wg0 (10.8.0.1) ──► Internet
-                                └──► FastAPI :8000
+Client ── AWG ──► familynet-vpn-awg ──┬──► wg0 (10.8.0.1) ──► Internet
+                                      └──► FastAPI :8000
 ```
 
 **Variant 3 (Xray):**
 ```
-Client ── Xray ──► amnezia-xray(:8443) ──┬──► wg0 (10.8.0.1) ──► Internet
-                                          └──► FastAPI :8000
+Client ── REALITY(:443) ──┐
+Client ── XHTTP(:8445) ───┤──► familynet-vpn-xray ──┬──► wg0 (10.8.0.1) ──► Internet
+Client ── WS(:8444) ──────┘                          └──► FastAPI :8000
 ```
 
-In variants 2 and 3, the admin panel is still reached via WireGuard IP (10.8.0.1:8000). The external-facing service (AWG or Xray) proxies only client traffic; admin access remains through the internal WireGuard interface.
+All three are **separate containers** that can run simultaneously on the same host. Each variant has its own port and can be used independently.
 
 ---
 

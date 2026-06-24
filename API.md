@@ -60,6 +60,7 @@ Always allowed: `127.0.0.1`, `::1`, `10.8.0.1` (middleware).
 |--------|----------|
 | GET | /peer/{client_id}/config |
 | GET | /peer/{client_id}/qr |
+| GET | /xray/links | Returns VLESS links for REALITY, XHTTP, WS (Xray variant only) |
 
 ## Parental Control
 
