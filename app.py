@@ -1750,7 +1750,7 @@ async def auth_middleware(request: Request, call_next):
         return await call_next(request)
 
     client_ip = request.client.host
-    if client_ip in ("127.0.0.1", "::1", "10.8.0.1"):
+    if client_ip == "10.8.0.1":
         return await call_next(request)
 
     try:
@@ -1847,10 +1847,8 @@ def diagnostics(x_api_token: Optional[str] = Header(default=None)) -> Dict[str, 
     wg_dump = try_run_cmd(["wg", "show", WG_INTERFACE, "dump"])
     wg_ok = wg_dump is not None and len(wg_dump.strip()) > 0
 
-    # Internet check (ip route or ping)
+    # Internet check (ip route only - faster, no ping)
     internet_ok = try_run_cmd(["ip", "route", "get", "8.8.8.8"]) is not None
-    if not internet_ok:
-        internet_ok = try_run_cmd(["ping", "-c", "1", "-W", "3", "8.8.8.8"]) is not None
 
     # Backup check
     info = backup_file_info("latest.wgadmin")
