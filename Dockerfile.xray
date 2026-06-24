@@ -1,10 +1,13 @@
 FROM python:3.11-slim
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    wireguard-tools iptables curl ca-certificates openssl \
+    wireguard-tools iptables curl ca-certificates openssl unzip \
     && rm -rf /var/lib/apt/lists/*
 
-RUN curl -L https://github.com/XTLS/Xray-install/raw/main/install-release.sh | bash -s -- install
+RUN curl -L https://github.com/XTLS/Xray-core/releases/latest/download/Xray-linux-64.zip -o /tmp/xray.zip \
+    && unzip -d /usr/local/share/xray /tmp/xray.zip \
+    && ln -s /usr/local/share/xray/xray /usr/local/bin/xray \
+    && rm /tmp/xray.zip
 
 WORKDIR /opt/wg-admin
 
