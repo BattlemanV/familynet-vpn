@@ -32,7 +32,7 @@ fi
 
 if [ ! -f "$WG_CONF" ]; then
     echo "Generating wg0.conf..."
-    python3 /app/init_config.py
+    python3 init_config.py
 fi
 
 if [ -f "$WG_CONF" ]; then
