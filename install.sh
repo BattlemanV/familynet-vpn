@@ -39,6 +39,7 @@ case "$VARIANT" in
     CONTAINER_PORT="$WG_PORT"
     PROTO="udp"
     CLIENT_APP="AmneziaWG"
+    VARIANT_LABEL="awg"
     ;;
   3)
     info "Selected: Xray"
@@ -51,6 +52,7 @@ case "$VARIANT" in
     CONTAINER_PORT="8443"
     PROTO="tcp"
     CLIENT_APP="Xray / V2Ray"
+    VARIANT_LABEL="xray"
     ;;
   *)
     info "Selected: WireGuard"
@@ -63,6 +65,7 @@ case "$VARIANT" in
     CONTAINER_PORT="51820"
     PROTO="udp"
     CLIENT_APP="WireGuard"
+    VARIANT_LABEL="wg"
     ;;
 esac
 
@@ -205,6 +208,7 @@ docker run -d \
     -e WG_HOST="$WG_HOST" \
     -e WG_PORT="$WG_PORT" \
     -e SERVER_HOSTNAME="$(hostname)" \
+    -e WG_VARIANT="$VARIANT_LABEL" \
     -e WG_INSIDE_CONTAINER=1 \
     -e ADMIN_BIND_HOST=10.8.0.1 \
     --restart unless-stopped \
