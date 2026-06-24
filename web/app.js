@@ -47,7 +47,7 @@ function renderError(e){document.getElementById('screenHome').innerHTML=`<div cl
 I18N.en.connectionError='Connection error';I18N.ru.connectionError='Ошибка подключения'
 I18N.en.serverError='Server error';I18N.ru.serverError='Ошибка сервера'
 I18N.en.connect='Connect';I18N.ru.connect='Подключиться'
-I18N.en.recoveryAccess='Password';I18N.ru.recoveryAccess='Пароль';I18N.zh.recoveryAccess='密码';I18N.tr.recoveryAccess='Şifre';I18N.fa.recoveryAccess='رمز عبور';I18N.es.recoveryAccess='Contraseña';I18N.hi.recoveryAccess='पासवर्ड'
+I18N.en.recoveryAccess='Password';I18N.ru.recoveryAccess='Пароль';I18N.zh.recoveryAccess='密码';I18N.tr.recoveryAccess='Şifre';I18N.fa.recoveryAccess='رمز عبور';I18N.es.recoveryAccess='Token de recuperación';I18N.hi.recoveryAccess='पासवर्ड'
 I18N.en.enterToken='Password';I18N.ru.enterToken='Пароль';I18N.zh.enterToken='密码';I18N.tr.enterToken='Şifre';I18N.fa.enterToken='رمز عبور';I18N.es.enterToken='Contraseña';I18N.hi.enterToken='पासवर्ड'
 I18N.en.apiTokens='Passwords';I18N.ru.apiTokens='Пароли';I18N.zh.apiTokens='密码';I18N.tr.apiTokens='Şifreler';I18N.fa.apiTokens='رمزهای عبور';I18N.es.apiTokens='Contraseñas';I18N.hi.apiTokens='पासवर्ड'
 I18N.en.createToken='Set Password';I18N.ru.createToken='Создать пароль';I18N.zh.createToken='设置密码';I18N.tr.createToken='Şifre Belirle';I18N.fa.createToken='تنظیم رمز عبور';I18N.es.createToken='Establecer Contraseña';I18N.hi.createToken='पासवर्ड सेट करें'
