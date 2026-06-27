@@ -55,10 +55,24 @@ def _read_short_id() -> str:
         return ""
 
 CLIENTS_LOCK = threading.Lock()
+_XRAY_SYNC_LOCK = threading.Lock()
+_XRAY_SYNC_PENDING = False
 
 def sync_xray_config_background() -> None:
-    import threading
-    threading.Thread(target=sync_xray_config, daemon=True).start()
+    global _XRAY_SYNC_PENDING
+    if _XRAY_SYNC_PENDING:
+        return
+    _XRAY_SYNC_PENDING = True
+    threading.Thread(target=_sync_xray_config_locked, daemon=True).start()
+
+def _sync_xray_config_locked() -> None:
+    global _XRAY_SYNC_PENDING
+    with _XRAY_SYNC_LOCK:
+        _XRAY_SYNC_PENDING = False
+        try:
+            sync_xray_config()
+        except Exception as e:
+            print(f"[xray] sync_xray_config error: {e}")
 
 def sync_xray_config() -> None:
     data = read_clients_data()
@@ -183,6 +197,7 @@ def sync_xray_config() -> None:
 
     atomic_json_write(XRAY_CONFIG, config)
     try_run_cmd(["pkill", "-x", "xray"], timeout=5)
+    time.sleep(0.3)
     subprocess.Popen(
         ["nohup", "xray", "run", "-c", XRAY_CONFIG],
         stdout=open("/tmp/xray.log", "a"), stderr=subprocess.STDOUT,
