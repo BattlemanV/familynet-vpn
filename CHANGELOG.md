@@ -1,5 +1,22 @@
 # Changelog
 
+## v2.1 — Mobile PWA Stability & Xray Race Fixes
+
+- **Service Worker**: fixed `?v=Date.now()` causing hundreds of orphan SW registrations; SW now registered at fixed `/sw.js` with cleanup of old registrations
+- **API timeout**: replaced `AbortController` (broken through SW on iOS Safari) with `Promise.race` + 20s timeout guaranteed to fire
+- **SW timeout**: added 30s `AbortController` inside SW fetch handler to prevent hanging connections
+- **Cache busting**: `cache:'no-cache'` on all API fetches to prevent stale browser cache
+- **`refreshAll()`**: replaced recursive queue with `while(_refreshPromise){await}` loop — no more race with 5s poll
+- **Optimistic create**: peer pushed to `state.peers` + `showMain()` called immediately after POST, `refreshAll()` runs in background
+- **Double-tap guard**: `_creating` flag + button disabled with "Загрузка..." text
+- **`try/catch` in `createClient()`**: non-fatal errors now show toast instead of silently hanging UI
+- **`sync_xray_config()` debounce + lock**: `_XRAY_SYNC_PENDING` prevents spawning threads; `_XRAY_SYNC_LOCK` prevents two threads from `pkill`+`Popen` simultaneously
+- **`CLIENTS_LOCK`**: `threading.Lock()` around all `clients.json` read-modify-write to prevent race conditions
+- **`get_xray_traffic()` cache fix**: `_TRAFFIC_CACHE_TS` set before xray query, blocking repeated 5s timeouts across N peers × 2 endpoints
+- **Startup delay**: `time.sleep(0.3)` before `Popen xray` to let OS free ports
+- **Routes**: `/sw.js` and `/manifest.json` now served by backend (were 404)
+- **Backup guard**: `os.path.exists()` check before `shutil.copy2` on fresh install
+
 ## v2.0 — Code Separation & Xray Stabilisation
 
 - **Code separation**: monolithic `app.py` (~2750 lines) split into:
