@@ -13,9 +13,9 @@ services:
       - "${AWG_PORT:-31121}:${AWG_PORT:-31121}/udp"
       - "127.0.0.1:${API_PORT:-8000}:8000"
     volumes:
-      - "./app.py:/app/app.py"
-      - "./web:/app/web"
-      - "./entrypoint-awg.sh:/entrypoint.sh"
+      - "./app.py:/opt/wg-admin/app.py"
+      - "./web:/opt/wg-admin/web"
+      - "./entrypoint-awg.sh:/opt/wg-admin/entrypoint-awg.sh"
       - "wg-vpn-data:/data"
     environment:
       - WG_HOST=${WG_HOST:?err}

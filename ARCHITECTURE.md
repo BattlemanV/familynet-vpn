@@ -49,7 +49,9 @@ curl -fsSL https://raw.githubusercontent.com/BattlemanV/familynet-vpn/main/insta
 ```
 
 All variants share:
-- `app.py` / `web/` — identical management panel
+- `common.py` — shared backend (auth, backup, tokens, i18n, clients CRUD, system info, settings, activity log, avatars)
+- Variant-specific `app.py` (WG/AWG) or `app_xray.py` (Xray) — wireguard/xray logic
+- `web/` — identical PWA frontend
 - `/data` volume — same JSON/SQLite format
 - `api_token` — same auth mechanism
 
@@ -114,16 +116,27 @@ Files:
 
 Responsibilities: Dashboard, client management, traffic stats, activity log, settings, backups, QR codes, avatars, parental control, maintenance.
 
-### Backend
+### Backend (Shared — common.py)
 
 File:
-- `app.py` — FastAPI app, ~2750 lines, single file
+- `common.py` — pure shared code, ~560 lines, no variant-specific logic
 
-Responsibilities: REST API (40+ endpoints), auth middleware (VPN-first), WireGuard integration (wg-quick, wg set, iptables), client lifecycle, speed limits (tc), traffic stats (SQLite, background collector), backup/restore (tar.gz, atomic writes), parental control, avatars, global exception handler.
+Responsibilities: Auth middleware (VPN-first with X-API-Token), backup/restore (tar.gz, atomic writes, safety snapshots), multi-token management (api_tokens.json), clients JSON CRUD, system info (CPU/RAM/disk/uptime), settings, activity log, avatars, speed limits file I/O, parental rules file I/O, global exception handler.
+
+### Backend (Variants)
+
+| File | Variant | Lines | Responsibilities |
+|------|---------|-------|------------------|
+| `app.py` | WG / AWG | ~1800 | wg-quick, wg dump/parse, wg set, iptables, traffic DB (SQLite, background collector), speed limits (tc), parental control (schedule + daily bytes), WireGuard config download/QR |
+| `app_xray.py` | Xray | ~940 | `sync_xray_config()` (generates xray.json + restarts xray), 3 inbounds (REALITY/WS/XHTTP), per-peer UUID CRUD, VLESS link builder, config download/QR for each protocol, dashboard, diagnostics, stub for traffic history & parental limits |
 
 Support files:
-- `entrypoint.sh` — container entrypoint: WireGuard up → uvicorn
-- `Dockerfile` — python:3.11-slim, wireguard-tools + curl + iptables, HEALTHCHECK
+- `Dockerfile` — python:3.11-slim, wireguard-tools + curl + iptables, HEALTHCHECK (WG variant)
+- `Dockerfile.awg` — same as Dockerfile + amneziawg-tools (AWG variant)
+- `Dockerfile.xray` — same as Dockerfile + xray-core (Xray variant)
+- `entrypoint.sh` — WG container entrypoint: wg-quick up → uvicorn
+- `entrypoint-awg.sh` — AWG container entrypoint: awg-quick up → uvicorn
+- `entrypoint-xray.sh` — Xray container entrypoint: wg-quick up → xray run → uvicorn
 - `init_config.py` — initial config generator
 - `requirements.txt` — Python deps
 
@@ -152,11 +165,16 @@ Symmetrical (same rate for upload/download). Parental control uses separate clas
 ## Security
 
 ### VPN-First Admin Model
-- Uvicorn binds to `ADMIN_BIND_HOST` env (set to `10.8.0.1` by install.sh)
-- Middleware: admin peer IP (10.8.0.x) → access without token
-- `127.0.0.1`, `::1`, `10.8.0.1` always allowed
-- Recovery token (`X-API-Token` / `?token=`) — emergency/developer only
-- Host port: loopback only (`-p 127.0.0.1:8000:8000`)
+- Auth middleware checks in order:
+  1. Public paths (`/health`, `/`, `/app.js`, etc.) — always allowed
+  2. Container-internal IP (`10.8.0.1`) — always allowed
+  3. Admin peer VPN IP (`10.8.0.x` with `role: admin`) — allowed without token
+  4. `X-API-Token` header or `?token=` query param — recovery/developer access
+- `Authorization: Bearer` is **not** used; only `X-API-Token` header
+- Uvicorn binds to `ADMIN_BIND_HOST` env
+- Host port: varies by variant:
+  - WG/AWG: `-p 127.0.0.1:8000:8000` (loopback)
+  - Xray: `-p 8082:8000` (public, tunneled through Xray WS)
 
 ### Sensitive files (never commit)
 `api_token`, `*.json` runtime files, `*.sqlite`, `*.log`, `*.wgadmin`, `*.tar.gz`

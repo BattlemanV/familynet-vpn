@@ -26,8 +26,9 @@ During install you choose one of three variants:
 
 All variants run as a **single container** with:
 - WireGuard inside (wg0 interface, 10.8.0.1/24)
-- FamilyNet management panel (FastAPI + PWA)
-- Persistent `/data` volume (configs, traffic DB, backups)
+- FamilyNet management panel (FastAPI + PWA, shared `common.py` + variant `app.py` / `app_xray.py`)
+- Xray-core (Xray variant only)
+- Persistent `/data` volume (configs, xray.json, traffic DB, backups)
 
 ## First-Time Setup
 

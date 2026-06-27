@@ -55,9 +55,9 @@ After installation, open the panel via VPN:
 
 - Docker (python:3.11-slim)
 - WireGuard / AmneziaWG / Xray-core
-- FastAPI + Uvicorn
+- FastAPI + Uvicorn (`common.py` + variant `app.py` / `app_xray.py`)
 - PWA frontend (vanilla JS)
-- SQLite (traffic history)
+- SQLite (traffic history, WG/AWG only)
 
 ## Documentation
 

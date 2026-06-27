@@ -142,4 +142,4 @@ fi
 nohup xray run -c "$XRAY_CONF" > /tmp/xray.log 2>&1 &
 sleep 1
 
-exec uvicorn app:app --host "${ADMIN_BIND_HOST:-0.0.0.0}" --port 8000
+exec uvicorn app_xray:app --host "${ADMIN_BIND_HOST:-0.0.0.0}" --port 8000

@@ -1,5 +1,17 @@
 # Changelog
 
+## v2.0 — Code Separation & Xray Stabilisation
+
+- **Code separation**: monolithic `app.py` (~2750 lines) split into:
+  - `common.py` (~560 lines) — pure shared logic: auth, backup, tokens, clients CRUD, system info, settings, activity log, i18n, avatars, health
+  - `app.py` (~1800 lines) — WG/AWG-specific logic: wg-quick, wg dump/parse, iptables, traffic DB (SQLite), speed limits (tc), parental control
+  - `app_xray.py` (~940 lines) — Xray-specific logic: `sync_xray_config()`, 3 inbounds (REALITY/WS/XHTTP), per-peer UUID CRUD, VLESS link builder, config download/QR per protocol, dashboard, diagnostics
+- **Zero conditional checks**: no `if WG_VARIANT == "xray"` anywhere — variants are entirely separate files
+- **Auth middleware**: `x-api-token` header (not `Authorization: Bearer`) with multi-token support via `api_tokens.json`
+- **Diagnostics**: `pidof` instead of `pgrep` for xray process detection (pgrep not available in slim image)
+- **REALITY short ID persistence**: `reality_short_id` file extracted from existing xray.json if missing on startup
+- **Multi-token auth**: legacy `api_token` auto-migrated to `api_tokens.json` with recovery token reconciliation
+
 ## v1.1 — Three-Tier Architecture
 
 - **AWG variant** (`Dockerfile.awg`, `entrypoint-awg.sh`): AmneziaWG userspace daemon with obfuscation (Jc=4, Jmin=10, Jmax=50, S1=97, S2=99), port 31121/udp
