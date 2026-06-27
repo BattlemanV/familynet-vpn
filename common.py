@@ -72,9 +72,11 @@ def try_run_cmd(cmd: List[str], timeout: int = 8) -> Optional[str]:
         return None
 
 def bytes_to_human(num: int) -> str:
-    gb = num / (1024 ** 3)
-    if gb < 0.1: return "<0.1 GB"
-    return f"{gb:.1f} GB"
+    if num < 1024: return f"{num} B"
+    if num < 1024 * 1024: return f"{num // 1024} KB"
+    mb = num / (1024.0 * 1024)
+    if mb < 1024: return f"{mb:.1f} MB"
+    return f"{mb / 1024:.1f} GB"
 
 def backup_size_human(num: int) -> str:
     if num < 1024: return f"{num} B"

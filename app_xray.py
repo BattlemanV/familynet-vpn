@@ -1,4 +1,4 @@
-import io, json, os, re, secrets, shutil, subprocess, threading, time, uuid as uuid_mod
+import io, json, os, re, secrets, shutil, subprocess, sqlite3, threading, time, uuid as uuid_mod
 from typing import Any, Dict, List, Optional
 from pathlib import Path
 
@@ -11,6 +11,7 @@ from common import (
     IS_CONTAINER, APP_DIR, WEB_DIR, CLIENTS_FILE, BACKUP_DIR, TOKEN_FILE, TOKEN_NEW_FILE,
     TOKENS_FILE, SETTINGS_FILE, ACTIVITY_LOG, HEALTH_FILE, PUBLIC_PATHS, LEGACY_PROTECTED_NAMES,
     atomic_json_write, run_cmd, try_run_cmd, bytes_to_human, handshake_to_text,
+    seconds_to_human, today_key, week_key, month_key,
     _get_hostname, get_loadavg, get_cpu_usage, get_memory, get_disk_root, get_uptime,
     read_settings, write_settings, apply_timezone,
     log_activity, read_activity,
@@ -19,7 +20,7 @@ from common import (
     read_clients_data, get_client, allocate_next_client_ip,
     _create_backup, _acquire_backup_lock, config_changed, backup_file_info,
     _do_restore, _read_health, _write_health, _days_since,
-    _migrate_protected_peers, _migrate_peer_roles, NAME_RE,
+    _migrate_protected_peers, _migrate_peer_roles, NAME_RE, AVATARS_PATH,
 )
 
 XRAY_CONFIG = os.path.join(APP_DIR, "xray.json")
@@ -33,6 +34,8 @@ XRAY_XHTTP_PORT = int(os.environ.get("XHTTP_PORT", "8445"))
 XRAY_WS_INTERNAL = int(os.environ.get("XRAY_PORT", "8443"))
 XRAY_XHTTP_INTERNAL = 8445
 XRAY_API_PORT = int(os.environ.get("XRAY_API_PORT", "62789"))
+
+TRAFFIC_DB_FILE = os.path.join(APP_DIR, "traffic_stats.sqlite")
 
 REALITY_PUBLIC_KEY_FILE = os.path.join(APP_DIR, "reality_public")
 REALITY_SHORT_ID_FILE = os.path.join(APP_DIR, "reality_short_id")
@@ -216,81 +219,159 @@ def build_xray_link(client_id: str, proto: str) -> str:
 def post_restart_xray():
     sync_xray_config()
 
-_ONLINE_UUIDS: List[str] = []
-_ONLINE_UUIDS_TS: float = 0
-
-def get_online_uuids() -> List[str]:
-    global _ONLINE_UUIDS, _ONLINE_UUIDS_TS
-    now = time.time()
-    if now - _ONLINE_UUIDS_TS < 15:
-        return _ONLINE_UUIDS
-    out = try_run_cmd(["xray", "api", "statsgetallonlineusers", "--server", f"127.0.0.1:{XRAY_API_PORT}"], timeout=5)
-    if out:
-        try:
-            data = json.loads(out)
-            if isinstance(data, dict):
-                _ONLINE_UUIDS = data.get("users", [])
-            elif isinstance(data, list):
-                _ONLINE_UUIDS = data
-            else:
-                _ONLINE_UUIDS = []
-        except json.JSONDecodeError:
-            _ONLINE_UUIDS = [line.strip() for line in out.splitlines() if line.strip()]
-    else:
-        _ONLINE_UUIDS = []
-    _ONLINE_UUIDS_TS = now
-    return _ONLINE_UUIDS
-
 _TRAFFIC_CACHE: Dict[str, Dict[str, int]] = {}
 _TRAFFIC_CACHE_TS: float = 0
+_TRAFFIC_ACCUM: Dict[str, Dict[str, int]] = {}
 
 def get_xray_traffic() -> Dict[str, Dict[str, int]]:
-    global _TRAFFIC_CACHE, _TRAFFIC_CACHE_TS
+    global _TRAFFIC_CACHE, _TRAFFIC_CACHE_TS, _TRAFFIC_ACCUM
     now = time.time()
     if now - _TRAFFIC_CACHE_TS < 30:
         return _TRAFFIC_CACHE
     result: Dict[str, Dict[str, int]] = {}
-    out = try_run_cmd(["xray", "api", "statsquery", "--server", f"127.0.0.1:{XRAY_API_PORT}", "-pattern", "user>>>", "-reset"], timeout=5)
+    out = try_run_cmd(["xray", "api", "statsquery", "--server", f"127.0.0.1:{XRAY_API_PORT}", "-pattern", "user>>>"], timeout=5)
     if out:
         try:
             data = json.loads(out)
+            entries = []
             if isinstance(data, dict):
-                for entry in data.get("stat", []):
+                entries = data.get("stat", [])
+            elif isinstance(data, list):
+                entries = data
+            for entry in entries:
+                if isinstance(entry, dict):
                     name = entry.get("name", "")
-                    value = entry.get("value", 0)
+                    value = int(entry.get("value", 0))
                     match = re.search(r"user>>>([^>]+)>>>traffic>>>(downlink|uplink)", name)
                     if match:
                         email = match.group(1)
                         direction = match.group(2)
                         result.setdefault(email, {"downlink": 0, "uplink": 0})
-                        result[email][direction] = int(value)
-            elif isinstance(data, list):
-                for entry in data:
-                    if isinstance(entry, dict):
-                        name = entry.get("name", "")
-                        value = entry.get("value", 0)
-                        match = re.search(r"user>>>([^>]+)>>>traffic>>>(downlink|uplink)", name)
-                        if match:
-                            email = match.group(1)
-                            direction = match.group(2)
-                            result.setdefault(email, {"downlink": 0, "uplink": 0})
-                            result[email][direction] = int(value)
+                        result[email][direction] = max(result[email][direction], value)
         except json.JSONDecodeError:
             pass
-    _TRAFFIC_CACHE = result
+    for email, data in result.items():
+        prev = _TRAFFIC_ACCUM.get(email, {"downlink": 0, "uplink": 0})
+        _TRAFFIC_ACCUM[email] = {
+            "downlink": max(prev["downlink"], data["downlink"]),
+            "uplink": max(prev["uplink"], data["uplink"]),
+        }
+    _TRAFFIC_CACHE = dict(_TRAFFIC_ACCUM)
     _TRAFFIC_CACHE_TS = now
-    return result
+    return _TRAFFIC_CACHE
+
+def init_traffic_db() -> None:
+    with sqlite3.connect(TRAFFIC_DB_FILE, timeout=10) as db:
+        db.execute("PRAGMA journal_mode=WAL")
+        db.execute("CREATE TABLE IF NOT EXISTS peer_counters (public_key TEXT PRIMARY KEY, last_rx INTEGER NOT NULL DEFAULT 0, last_tx INTEGER NOT NULL DEFAULT 0, updated_ts INTEGER NOT NULL DEFAULT 0)")
+        db.execute("CREATE TABLE IF NOT EXISTS traffic_totals (public_key TEXT NOT NULL, period_type TEXT NOT NULL, period_key TEXT NOT NULL, rx INTEGER NOT NULL DEFAULT 0, tx INTEGER NOT NULL DEFAULT 0, PRIMARY KEY (public_key, period_type, period_key))")
+        db.execute("CREATE TABLE IF NOT EXISTS online_totals (public_key TEXT NOT NULL, day_key TEXT NOT NULL, seconds INTEGER NOT NULL DEFAULT 0, last_seen_ts INTEGER NOT NULL DEFAULT 0, PRIMARY KEY (public_key, day_key))")
+        db.execute("CREATE TABLE IF NOT EXISTS peer_last_seen (public_key TEXT PRIMARY KEY, last_seen INTEGER NOT NULL DEFAULT 0, updated_ts INTEGER NOT NULL DEFAULT 0)")
+
+def save_peer_last_seen(peer_key: str, latest_handshake: int) -> int:
+    if not peer_key or latest_handshake <= 0: return 0
+    now = int(time.time())
+    with sqlite3.connect(TRAFFIC_DB_FILE, timeout=10) as db:
+        row = db.execute("SELECT last_seen FROM peer_last_seen WHERE public_key = ?", (peer_key,)).fetchone()
+        old_last_seen = int(row[0]) if row else 0
+        new_last_seen = max(old_last_seen, int(latest_handshake))
+        db.execute("INSERT INTO peer_last_seen (public_key, last_seen, updated_ts) VALUES (?, ?, ?) ON CONFLICT(public_key) DO UPDATE SET last_seen = CASE WHEN excluded.last_seen > peer_last_seen.last_seen THEN excluded.last_seen ELSE peer_last_seen.last_seen END, updated_ts = excluded.updated_ts", (peer_key, new_last_seen, now))
+        return new_last_seen
+
+def get_peer_last_seen(peer_key: str) -> int:
+    if not peer_key: return 0
+    with sqlite3.connect(TRAFFIC_DB_FILE, timeout=10) as db:
+        row = db.execute("SELECT last_seen FROM peer_last_seen WHERE public_key = ?", (peer_key,)).fetchone()
+    return int(row[0]) if row else 0
+
+def add_traffic_total(db, peer_key: str, period_type: str, period_key: str, rx_delta: int, tx_delta: int) -> None:
+    db.execute("INSERT INTO traffic_totals (public_key, period_type, period_key, rx, tx) VALUES (?, ?, ?, ?, ?) ON CONFLICT(public_key, period_type, period_key) DO UPDATE SET rx = rx + excluded.rx, tx = tx + excluded.tx", (peer_key, period_type, period_key, rx_delta, tx_delta))
+
+def read_traffic_total(db, peer_key: str, period_type: str, period_key: str) -> Dict[str, int]:
+    row = db.execute("SELECT rx, tx FROM traffic_totals WHERE public_key = ? AND period_type = ? AND period_key = ?", (peer_key, period_type, period_key)).fetchone()
+    if not row: return {"rx": 0, "tx": 0}
+    return {"rx": int(row[0] or 0), "tx": int(row[1] or 0)}
+
+def update_online_total(db, peer_key: str, day: str, online: bool, now_ts: int) -> int:
+    row = db.execute("SELECT seconds, last_seen_ts FROM online_totals WHERE public_key = ? AND day_key = ?", (peer_key, day)).fetchone()
+    if not row:
+        db.execute("INSERT INTO online_totals (public_key, day_key, seconds, last_seen_ts) VALUES (?, ?, 0, ?)", (peer_key, day, now_ts if online else 0))
+        return 0
+    seconds = int(row[0] or 0); last_seen = int(row[1] or 0)
+    if online:
+        if last_seen > 0: seconds += min(max(0, now_ts - last_seen), 120)
+        db.execute("UPDATE online_totals SET seconds = ?, last_seen_ts = ? WHERE public_key = ? AND day_key = ?", (seconds, now_ts, peer_key, day))
+    else:
+        db.execute("UPDATE online_totals SET last_seen_ts = 0 WHERE public_key = ? AND day_key = ?", (peer_key, day))
+    return seconds
+
+def read_rolling_traffic(db, peer_key: str, days: int) -> Dict[str, int]:
+    cutoff = time.strftime("%Y-%m-%d", time.localtime(time.time() - days * 86400))
+    row = db.execute("SELECT COALESCE(SUM(rx), 0), COALESCE(SUM(tx), 0) FROM traffic_totals WHERE public_key = ? AND period_type = 'day' AND period_key >= ?", (peer_key, cutoff)).fetchone()
+    return {"rx": int(row[0] or 0), "tx": int(row[1] or 0)}
+
+def cleanup_traffic_db(db) -> None:
+    cutoff_day = time.strftime("%Y-%m-%d", time.localtime(time.time() - 180 * 86400))
+    db.execute("DELETE FROM traffic_totals WHERE period_type = 'day' AND period_key < ?", (cutoff_day,))
+    db.execute("DELETE FROM online_totals WHERE day_key < ?", (cutoff_day,))
+
+def get_period_traffic(peer_key: str, rx: int, tx: int, online: bool = False) -> Dict[str, Any]:
+    today = today_key(); week = week_key(); month = month_key(); now_ts = int(time.time())
+    with sqlite3.connect(TRAFFIC_DB_FILE, timeout=10) as db:
+        row = db.execute("SELECT last_rx, last_tx FROM peer_counters WHERE public_key = ?", (peer_key,)).fetchone()
+        ignore_zero_offline = bool(row) and rx == 0 and tx == 0 and not online
+        if row is None:
+            rx_delta = 0; tx_delta = 0
+            db.execute("INSERT INTO peer_counters (public_key, last_rx, last_tx, updated_ts) VALUES (?, ?, ?, ?)", (peer_key, rx, tx, now_ts))
+        elif ignore_zero_offline: rx_delta = 0; tx_delta = 0
+        else:
+            last_rx = int(row[0] or 0); last_tx = int(row[1] or 0)
+            rx_delta = rx - last_rx if rx >= last_rx else rx; tx_delta = tx - last_tx if tx >= last_tx else tx
+            rx_delta = max(0, rx_delta); tx_delta = max(0, tx_delta)
+            db.execute("UPDATE peer_counters SET last_rx = ?, last_tx = ?, updated_ts = ? WHERE public_key = ?", (rx, tx, now_ts, peer_key))
+        if rx_delta or tx_delta:
+            add_traffic_total(db, peer_key, "day", today, rx_delta, tx_delta)
+            add_traffic_total(db, peer_key, "hour", time.strftime("%Y-%m-%d-%H", time.gmtime()), rx_delta, tx_delta)
+            add_traffic_total(db, peer_key, "week", week, rx_delta, tx_delta)
+            add_traffic_total(db, peer_key, "month", month, rx_delta, tx_delta)
+            add_traffic_total(db, peer_key, "total", "all", rx_delta, tx_delta)
+        online_today_seconds = update_online_total(db, peer_key, today, online, now_ts)
+        day_t = read_traffic_total(db, peer_key, "day", today)
+        week_total = read_rolling_traffic(db, peer_key, 7)
+        month_total = read_traffic_total(db, peer_key, "month", month)
+        year_total = read_rolling_traffic(db, peer_key, 365)
+        total = read_traffic_total(db, peer_key, "total", "all")
+        cleanup_traffic_db(db)
+    return {
+        "today_rx_bytes": day_t["rx"], "today_tx_bytes": day_t["tx"], "today_total_bytes": day_t["rx"] + day_t["tx"],
+        "today_rx_human": bytes_to_human(day_t["rx"]), "today_tx_human": bytes_to_human(day_t["tx"]), "today_total_human": bytes_to_human(day_t["rx"] + day_t["tx"]),
+        "week_rx_bytes": week_total["rx"], "week_tx_bytes": week_total["tx"], "week_total_bytes": week_total["rx"] + week_total["tx"],
+        "week_rx_human": bytes_to_human(week_total["rx"]), "week_tx_human": bytes_to_human(week_total["tx"]), "week_total_human": bytes_to_human(week_total["rx"] + week_total["tx"]),
+        "month_rx_bytes": month_total["rx"], "month_tx_bytes": month_total["tx"], "month_total_bytes": month_total["rx"] + month_total["tx"],
+        "month_rx_human": bytes_to_human(month_total["rx"]), "month_tx_human": bytes_to_human(month_total["tx"]), "month_total_human": bytes_to_human(month_total["rx"] + month_total["tx"]),
+        "year_rx_bytes": year_total["rx"], "year_tx_bytes": year_total["tx"], "year_total_bytes": year_total["rx"] + year_total["tx"],
+        "year_rx_human": bytes_to_human(year_total["rx"]), "year_tx_human": bytes_to_human(year_total["tx"]), "year_total_human": bytes_to_human(year_total["rx"] + year_total["tx"]),
+        "saved_total_rx_bytes": total["rx"], "saved_total_tx_bytes": total["tx"], "saved_total_bytes": total["rx"] + total["tx"],
+        "saved_total_human": bytes_to_human(total["rx"] + total["tx"]), "saved_total_rx_human": bytes_to_human(total["rx"]), "saved_total_tx_human": bytes_to_human(total["tx"]),
+        "online_today_seconds": online_today_seconds, "online_today_human": seconds_to_human(online_today_seconds),
+    }
 
 def _build_peer_entry(client: Dict[str, Any], client_id: str) -> Dict[str, Any]:
     name = client.get("name", client_id)
     address = client.get("address", "")
     uid = client.get("xray_uuid", "")
-    online = uid in get_online_uuids()
     traffic_all = get_xray_traffic()
     peer_traffic = traffic_all.get(uid, {})
     dl = peer_traffic.get("downlink", 0)
     ul = peer_traffic.get("uplink", 0)
     total = dl + ul
+    period = get_period_traffic(uid, ul, dl, False) if uid else {}
+    now = int(time.time())
+    has_traffic = bool(total) or bool(period.get("today_total_bytes"))
+    last_seen = save_peer_last_seen(uid, now) if has_traffic else 0
+    if not last_seen:
+        last_seen = get_peer_last_seen(uid)
+    online = last_seen > 0 and (now - last_seen) < 1800
     return {
         "id": client_id[:12],
         "name": name,
@@ -304,32 +385,18 @@ def _build_peer_entry(client: Dict[str, Any], client_id: str) -> Dict[str, Any]:
         "public_key_short": "",
         "endpoint": None,
         "allowed_ips": "",
-        "latest_handshake": int(time.time()) if online else 0,
-        "latest_handshake_text": handshake_to_text(int(time.time())) if online else "never",
+        "latest_handshake": last_seen,
+        "latest_handshake_text": handshake_to_text(last_seen),
         "online": online,
         "is_active_now": online,
         "transfer_rx_bytes": ul, "transfer_tx_bytes": dl, "transfer_total_bytes": total,
         "transfer_rx_human": bytes_to_human(ul), "transfer_tx_human": bytes_to_human(dl),
         "transfer_total_human": bytes_to_human(total),
-        "today_rx_bytes": ul, "today_tx_bytes": dl, "today_total_bytes": total,
-        "today_rx_human": bytes_to_human(ul), "today_tx_human": bytes_to_human(dl),
-        "today_total_human": bytes_to_human(total),
-        "week_rx_bytes": 0, "week_tx_bytes": 0, "week_total_bytes": 0,
-        "week_rx_human": bytes_to_human(0), "week_tx_human": bytes_to_human(0),
-        "week_total_human": bytes_to_human(0),
-        "month_rx_bytes": 0, "month_tx_bytes": 0, "month_total_bytes": 0,
-        "month_rx_human": bytes_to_human(0), "month_tx_human": bytes_to_human(0),
-        "month_total_human": bytes_to_human(0),
-        "year_rx_bytes": 0, "year_tx_bytes": 0, "year_total_bytes": 0,
-        "year_rx_human": bytes_to_human(0), "year_tx_human": bytes_to_human(0),
-        "year_total_human": bytes_to_human(0),
-        "saved_total_rx_bytes": 0, "saved_total_tx_bytes": 0, "saved_total_bytes": 0,
-        "saved_total_human": bytes_to_human(0),
+        **period,
         "persistent_keepalive": "off",
         "has_preshared_key": False,
         "speed_limited": False,
         "speed_limit_rate": None,
-        "today_total_human": bytes_to_human(total),
     }
 
 @asynccontextmanager
@@ -339,6 +406,7 @@ async def lifespan(app):
     _migrate_peer_roles()
     _migrate_old_tokens()
     _reconcile_recovery_token()
+    init_traffic_db()
     try:
         sync_xray_config()
     except Exception as e:
@@ -620,8 +688,15 @@ def dashboard(x_api_token: Optional[str] = Header(default=None)) -> Dict[str, An
     peers_list = [_build_peer_entry(c, cid) for cid, c in clients.items() if isinstance(c, dict)]
     total_rx = sum(p["transfer_rx_bytes"] for p in peers_list)
     total_tx = sum(p["transfer_tx_bytes"] for p in peers_list)
-    online_uuids = get_online_uuids()
-    online_count = sum(1 for c in clients.values() if isinstance(c, dict) and c.get("xray_uuid", "") in online_uuids)
+    vpn_today = sum(p.get("today_total_bytes", 0) for p in peers_list)
+    vpn_week = sum(p.get("week_total_bytes", 0) for p in peers_list)
+    vpn_month = sum(p.get("month_total_bytes", 0) for p in peers_list)
+    vpn_year = sum(p.get("year_total_bytes", 0) for p in peers_list)
+    vpn_saved_total = sum(p.get("saved_total_bytes", 0) for p in peers_list)
+    online_count = sum(1 for p in peers_list if p["online"])
+    online_peers = [{"name": p["name"], "ip": p["ip"], "latest_handshake_text": p["latest_handshake_text"],
+                      "transfer_total_human": p["transfer_total_human"], "protected": p["protected"]}
+                     for p in peers_list if p["online"]]
     return {
         "variant": "xray",
         "hostname": _get_hostname(),
@@ -640,17 +715,17 @@ def dashboard(x_api_token: Optional[str] = Header(default=None)) -> Dict[str, An
             "total_rx_human": bytes_to_human(total_rx),
             "total_tx_human": bytes_to_human(total_tx),
             "total_traffic_human": bytes_to_human(total_rx + total_tx),
-            "vpn_today_bytes": 0, "vpn_week_bytes": 0, "vpn_month_bytes": 0,
-            "vpn_year_bytes": 0, "vpn_saved_total_bytes": 0,
-            "vpn_today_human": bytes_to_human(0), "vpn_week_human": bytes_to_human(0),
-            "vpn_month_human": bytes_to_human(0), "vpn_year_human": bytes_to_human(0),
-            "vpn_saved_total_human": bytes_to_human(0),
+            "vpn_today_bytes": vpn_today, "vpn_week_bytes": vpn_week, "vpn_month_bytes": vpn_month,
+            "vpn_year_bytes": vpn_year, "vpn_saved_total_bytes": vpn_saved_total,
+            "vpn_today_human": bytes_to_human(vpn_today), "vpn_week_human": bytes_to_human(vpn_week),
+            "vpn_month_human": bytes_to_human(vpn_month), "vpn_year_human": bytes_to_human(vpn_year),
+            "vpn_saved_total_human": bytes_to_human(vpn_saved_total),
             "traffic_warn_bytes": read_settings().get("traffic_warn_gb", 30) * 1024 * 1024 * 1024,
             "timezone": read_settings().get("timezone", "auto"),
-            "top_user_now": {"active": False, "threshold_mbps": 1.0, "active_peer_count": 0,
+            "top_user_now": {"active": online_count > 0, "threshold_mbps": 1.0, "active_peer_count": online_count,
                              "active_peer_keys": [], "active_peer_threshold_mbps": 0.01,
                              "last_event": {}},
-            "online_peers": [],
+            "online_peers": online_peers,
         },
     }
 
@@ -664,16 +739,17 @@ def peers(x_api_token: Optional[str] = Header(default=None)) -> Dict[str, Any]:
         if isinstance(c, dict)
     ]
     peers_list.sort(key=lambda p: p.get("ip") or "")
+    online_count = sum(1 for p in peers_list if p["online"])
     return {
         "interface": "xray",
         "peers": peers_list,
         "peer_count": len(peers_list),
-        "online_peer_count": 0,
+        "online_peer_count": online_count,
         "enabled_peer_count": sum(1 for p in peers_list if p["enabled"]),
         "disabled_peer_count": sum(1 for p in peers_list if not p["enabled"]),
         "online_threshold_seconds": 1800,
-        "active_peer_count": 0,
-        "top_user_now": {"active": False, "threshold_mbps": 1.0, "active_peer_count": 0,
+        "active_peer_count": online_count,
+        "top_user_now": {"active": online_count > 0, "threshold_mbps": 1.0, "active_peer_count": online_count,
                          "active_peer_keys": [], "active_peer_threshold_mbps": 0.01,
                          "last_event": {}},
     }
@@ -874,11 +950,26 @@ def parental_get_rules(
 ) -> Dict[str, Any]:
     return {"rules": {}}
 
+def _get_xray_peer_key(client_id: str) -> str:
+    data = read_clients_data()
+    client = data.get("clients", {}).get(client_id)
+    if not client:
+        for cid, c in data.get("clients", {}).items():
+            if isinstance(c, dict) and (c.get("xray_uuid") == client_id or c.get("name") == client_id):
+                return c.get("xray_uuid", client_id)
+        return ""
+    return client.get("xray_uuid", "")
+
 @app.get("/peer/{client_id}/traffic/days")
 def peer_traffic_days(
     client_id: str, x_api_token: Optional[str] = Header(default=None)
 ) -> Dict[str, Any]:
-    return {"days": []}
+    peer_key = _get_xray_peer_key(client_id)
+    if not peer_key: return {"days": []}
+    cutoff = time.strftime("%Y-%m-%d", time.localtime(time.time() - 60 * 86400))
+    with sqlite3.connect(TRAFFIC_DB_FILE, timeout=10) as db:
+        rows = db.execute("SELECT period_key, rx, tx FROM traffic_totals WHERE public_key = ? AND period_type = 'day' AND period_key >= ? ORDER BY period_key ASC", (peer_key, cutoff)).fetchall()
+    return {"days": [{"date": r[0], "rx": int(r[1]), "tx": int(r[2])} for r in rows]}
 
 @app.get("/peer/{client_id}/traffic/hours")
 def peer_traffic_hours(
@@ -886,19 +977,38 @@ def peer_traffic_hours(
     date: Optional[str] = Query(default=None),
     x_api_token: Optional[str] = Header(default=None),
 ) -> Dict[str, Any]:
+    peer_key = _get_xray_peer_key(client_id)
+    if not peer_key: return {"hours": []}
+    if not date: date = today_key()
+    with sqlite3.connect(TRAFFIC_DB_FILE, timeout=10) as db:
+        rows = db.execute("SELECT period_key, rx, tx FROM traffic_totals WHERE public_key = ? AND period_type = 'hour' AND period_key LIKE ? ORDER BY period_key ASC", (peer_key, date + "%")).fetchall()
+        if rows: return {"hours": [{"h": r[0].split("-")[-1], "rx": int(r[1]), "tx": int(r[2])} for r in rows]}
+        if date == today_key():
+            day = read_traffic_total(db, peer_key, "day", date); total_rx, total_tx = day["rx"], day["tx"]
+            current_hour = int(time.strftime("%H", time.gmtime()))
+            if total_rx or total_tx:
+                cnt = current_hour + 1
+                return {"hours": [{"h": f"{h:02d}", "rx": total_rx // cnt, "tx": total_tx // cnt} for h in range(cnt)]}
     return {"hours": []}
 
 @app.get("/traffic/global/hours")
 def global_traffic_hours(
     x_api_token: Optional[str] = Header(default=None),
 ) -> Dict[str, Any]:
+    today = today_key()
+    with sqlite3.connect(TRAFFIC_DB_FILE, timeout=10) as db:
+        rows = db.execute("SELECT period_key, SUM(rx), SUM(tx) FROM traffic_totals WHERE period_type = 'hour' AND period_key LIKE ? GROUP BY period_key ORDER BY period_key ASC", (today + "%",)).fetchall()
+        if rows: return {"hours": [{"h": r[0].split("-")[-1], "rx": int(r[1]), "tx": int(r[2])} for r in rows]}
     return {"hours": []}
 
 @app.get("/traffic/global/days")
 def global_traffic_days(
     x_api_token: Optional[str] = Header(default=None),
 ) -> Dict[str, Any]:
-    return {"days": []}
+    cutoff = time.strftime("%Y-%m-%d", time.localtime(time.time() - 365 * 86400))
+    with sqlite3.connect(TRAFFIC_DB_FILE, timeout=10) as db:
+        rows = db.execute("SELECT period_key, SUM(rx), SUM(tx) FROM traffic_totals WHERE period_type = 'day' AND period_key >= ? GROUP BY period_key ORDER BY period_key ASC", (cutoff,)).fetchall()
+    return {"days": [{"date": r[0], "rx": int(r[1]), "tx": int(r[2])} for r in rows]}
 
 @app.post("/peer/{client_id}/speed-limit")
 def peer_speed_limit(
