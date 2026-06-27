@@ -54,6 +54,8 @@ def _read_short_id() -> str:
     except (FileNotFoundError, OSError):
         return ""
 
+CLIENTS_LOCK = threading.Lock()
+
 def sync_xray_config_background() -> None:
     import threading
     threading.Thread(target=sync_xray_config, daemon=True).start()
@@ -804,23 +806,26 @@ def peer_create(
         raise HTTPException(status_code=400, detail="Client name is required")
     if not NAME_RE.match(name):
         raise HTTPException(status_code=400, detail="Client name contains invalid characters")
-    data = read_clients_data()
-    clients = data.setdefault("clients", {})
-    for client in clients.values():
-        if isinstance(client, dict) and client.get("name") == name:
-            raise HTTPException(status_code=409, detail=f"Client already exists: {name}")
-    client_id = str(uuid_mod.uuid4())
-    address = allocate_next_client_ip(data)
-    backup_path = f"{CLIENTS_FILE}.bak-{int(time.time())}"
-    shutil.copy2(CLIENTS_FILE, backup_path)
-    now = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
-    clients[client_id] = {
-        "name": name, "address": address,
-        "xray_uuid": str(uuid_mod.uuid4()),
-        "createdAt": now, "updatedAt": now,
-        "enabled": True, "protected": False, "role": "user",
-    }
-    atomic_json_write(CLIENTS_FILE, data, backup=True)
+    with CLIENTS_LOCK:
+        data = read_clients_data()
+        clients = data.setdefault("clients", {})
+        for client in clients.values():
+            if isinstance(client, dict) and client.get("name") == name:
+                raise HTTPException(status_code=409, detail=f"Client already exists: {name}")
+        client_id = str(uuid_mod.uuid4())
+        address = allocate_next_client_ip(data)
+        backup_path = ""
+        if os.path.exists(CLIENTS_FILE):
+            backup_path = f"{CLIENTS_FILE}.bak-{int(time.time())}"
+            shutil.copy2(CLIENTS_FILE, backup_path)
+        now = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+        clients[client_id] = {
+            "name": name, "address": address,
+            "xray_uuid": str(uuid_mod.uuid4()),
+            "createdAt": now, "updatedAt": now,
+            "enabled": True, "protected": False, "role": "user",
+        }
+        atomic_json_write(CLIENTS_FILE, data, backup=True)
     log_activity("create", name, client_id, address, {"backup": backup_path})
     sync_xray_config_background()
     config_changed(f"peer-created:{name}")
@@ -830,18 +835,21 @@ def peer_create(
 def peer_delete(
     client_id: str, x_api_token: Optional[str] = Header(default=None)
 ) -> Dict[str, Any]:
-    item = get_client(client_id)
-    data = item["data"]
-    client = item["client"]
-    name = client.get("name", client_id)
-    address = client.get("address", "")
-    if client.get("protected", False):
-        log_activity("delete_blocked", name, client_id, address, {"reason": "Protected peer"})
-        raise HTTPException(status_code=403, detail="Protected peer")
-    backup_path = f"{CLIENTS_FILE}.bak-{int(time.time())}"
-    shutil.copy2(CLIENTS_FILE, backup_path)
-    data.get("clients", {}).pop(client_id, None)
-    atomic_json_write(CLIENTS_FILE, data, backup=True)
+    with CLIENTS_LOCK:
+        item = get_client(client_id)
+        data = item["data"]
+        client = item["client"]
+        name = client.get("name", client_id)
+        address = client.get("address", "")
+        if client.get("protected", False):
+            log_activity("delete_blocked", name, client_id, address, {"reason": "Protected peer"})
+            raise HTTPException(status_code=403, detail="Protected peer")
+        backup_path = ""
+        if os.path.exists(CLIENTS_FILE):
+            backup_path = f"{CLIENTS_FILE}.bak-{int(time.time())}"
+            shutil.copy2(CLIENTS_FILE, backup_path)
+        data.get("clients", {}).pop(client_id, None)
+        atomic_json_write(CLIENTS_FILE, data, backup=True)
     log_activity("delete", name, client_id, address, {"backup": backup_path})
     sync_xray_config_background()
     config_changed(f"peer-deleted:{name}")
@@ -851,18 +859,21 @@ def peer_delete(
 def peer_disable(
     client_id: str, x_api_token: Optional[str] = Header(default=None)
 ) -> Dict[str, Any]:
-    item = get_client(client_id)
-    data = item["data"]
-    client = item["client"]
-    name = client.get("name", client_id)
-    address = client.get("address", "")
-    public_key = client.get("publicKey", "")
-    if client.get("protected", False):
-        raise HTTPException(status_code=403, detail="Protected peer")
-    backup_path = f"{CLIENTS_FILE}.bak-{int(time.time())}"
-    shutil.copy2(CLIENTS_FILE, backup_path)
-    client["enabled"] = False
-    atomic_json_write(CLIENTS_FILE, data, backup=True)
+    with CLIENTS_LOCK:
+        item = get_client(client_id)
+        data = item["data"]
+        client = item["client"]
+        name = client.get("name", client_id)
+        address = client.get("address", "")
+        public_key = client.get("publicKey", "")
+        if client.get("protected", False):
+            raise HTTPException(status_code=403, detail="Protected peer")
+        backup_path = ""
+        if os.path.exists(CLIENTS_FILE):
+            backup_path = f"{CLIENTS_FILE}.bak-{int(time.time())}"
+            shutil.copy2(CLIENTS_FILE, backup_path)
+        client["enabled"] = False
+        atomic_json_write(CLIENTS_FILE, data, backup=True)
     log_activity("disable", name, client_id, address, {"backup": backup_path})
     sync_xray_config_background()
     return {"disabled": True, "peer": name, "ip": address, "client_id": client_id, "backup": backup_path}
@@ -871,15 +882,18 @@ def peer_disable(
 def peer_enable(
     client_id: str, x_api_token: Optional[str] = Header(default=None)
 ) -> Dict[str, Any]:
-    item = get_client(client_id)
-    data = item["data"]
-    client = item["client"]
-    name = client.get("name", client_id)
-    address = client.get("address", "")
-    backup_path = f"{CLIENTS_FILE}.bak-{int(time.time())}"
-    shutil.copy2(CLIENTS_FILE, backup_path)
-    client["enabled"] = True
-    atomic_json_write(CLIENTS_FILE, data, backup=True)
+    with CLIENTS_LOCK:
+        item = get_client(client_id)
+        data = item["data"]
+        client = item["client"]
+        name = client.get("name", client_id)
+        address = client.get("address", "")
+        backup_path = ""
+        if os.path.exists(CLIENTS_FILE):
+            backup_path = f"{CLIENTS_FILE}.bak-{int(time.time())}"
+            shutil.copy2(CLIENTS_FILE, backup_path)
+        client["enabled"] = True
+        atomic_json_write(CLIENTS_FILE, data, backup=True)
     log_activity("enable", name, client_id, address, {"backup": backup_path})
     sync_xray_config_background()
     return {"enabled": True, "peer": name, "ip": address, "client_id": client_id, "backup": backup_path}
@@ -895,12 +909,13 @@ def peer_rename(
         raise HTTPException(status_code=400, detail="Name is required")
     if not NAME_RE.match(new_name):
         raise HTTPException(status_code=400, detail="Name contains invalid characters")
-    item = get_client(client_id)
-    data = item["data"]
-    client = item["client"]
-    old_name = client.get("name", client_id)
-    client["name"] = new_name
-    atomic_json_write(CLIENTS_FILE, data, backup=True)
+    with CLIENTS_LOCK:
+        item = get_client(client_id)
+        data = item["data"]
+        client = item["client"]
+        old_name = client.get("name", client_id)
+        client["name"] = new_name
+        atomic_json_write(CLIENTS_FILE, data, backup=True)
     log_activity("rename", old_name, client_id, client.get("address", ""),
                  {"old_name": old_name, "new_name": new_name})
     return {"ok": True, "client_id": client_id, "name": new_name}
