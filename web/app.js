@@ -403,7 +403,7 @@ let _sx=0;document.body.addEventListener('touchstart',e=>{_sx=e.touches[0].clien
 // ── pull-to-refresh ──
 let _pullY=0,_pullRefreshing=false;document.body.addEventListener('touchstart',e=>{_pullY=e.touches[0].clientY},{passive:true});document.body.addEventListener('touchmove',e=>{if(_pullRefreshing)return;const dy=e.touches[0].clientY-_pullY;if(dy>50&&document.scrollingElement.scrollTop===0){_pullRefreshing=true;refreshAll();setTimeout(()=>{_pullRefreshing=false},2000)}},{passive:true})
 // ── sw ──
-if('serviceWorker'in navigator)navigator.serviceWorker.register('/sw.js?v='+Date.now())
+if('serviceWorker'in navigator){navigator.serviceWorker.getRegistrations().then(rs=>rs.forEach(reg=>reg.unregister().catch(()=>{})));navigator.serviceWorker.register('/sw.js')}
 // ── init (DOM is guaranteed ready since app.js loads at end of body) ──
 document.getElementById('modal')?.addEventListener('click',e=>{if(e.target.id==='modal')closeModal()});applyLang();loadAvatarsFromServer();showMain('home');refreshAll();setInterval(()=>{if(!document.hidden)refreshAll()},5000);const sp=document.getElementById('splash');if(sp){setTimeout(()=>{sp.style.opacity='0';document.querySelector('main').style.opacity='1';document.querySelector('nav').style.opacity='1'},1500);setTimeout(()=>sp.remove(),1800)}
 
