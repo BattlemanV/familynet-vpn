@@ -14,8 +14,7 @@ WORKDIR /opt/wg-admin
 COPY requirements.txt .
 RUN pip install --no-cache-dir --break-system-packages -r requirements.txt
 
-COPY common.py .
-COPY app_xray.py .
+COPY app.py .
 COPY init_config.py .
 COPY entrypoint-xray.sh .
 COPY web/ web/
@@ -38,6 +37,6 @@ EXPOSE 8443/tcp
 EXPOSE 8445/tcp
 
 HEALTHCHECK --interval=30s --timeout=10s --start-period=15s --retries=3 \
-  CMD curl -f http://10.8.0.1:8000/health || exit 1
+  CMD curl -f http://127.0.0.1:8000/health || exit 1
 
 ENTRYPOINT ["/opt/wg-admin/entrypoint-xray.sh"]
