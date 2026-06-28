@@ -58,11 +58,38 @@ if [ ! -f "$XRAY_CONF" ]; then
     REALITY_PUBLIC=$(echo "$REALITY_KEYS" | grep "PublicKey" | awk '{print $NF}')
     echo "$REALITY_PUBLIC" > "$DATA_DIR/reality_public"
     SHORT_ID=$(openssl rand -hex 4)
+    echo "$SHORT_ID" > "$DATA_DIR/reality_short_id"
 
     cat > "$XRAY_CONF" <<XRAYEOF
 {
   "log": {"loglevel": "warning"},
+  "stats": {},
+  "api": {
+    "tag": "api",
+    "services": ["StatsService"]
+  },
+  "policy": {
+    "levels": {
+      "0": {
+        "statsUserUplink": true,
+        "statsUserDownlink": true
+      }
+    },
+    "system": {
+      "statsInboundUplink": true,
+      "statsInboundDownlink": true,
+      "statsOutboundUplink": true,
+      "statsOutboundDownlink": true
+    }
+  },
   "inbounds": [
+    {
+      "port": 62789,
+      "listen": "127.0.0.1",
+      "protocol": "dokodemo-door",
+      "settings": {"address": "127.0.0.1"},
+      "tag": "api"
+    },
     {
       "port": ${REALITY_PORT},
       "protocol": "vless",
@@ -128,6 +155,7 @@ if [ ! -f "$XRAY_CONF" ]; then
   "routing": {
     "domainStrategy": "IPIfNonMatch",
     "rules": [
+      {"type": "field", "inboundTag": ["api"], "outboundTag": "api"},
       {"type": "field", "outboundTag": "direct", "network": "tcp,udp"}
     ]
   }
@@ -142,4 +170,4 @@ fi
 nohup xray run -c "$XRAY_CONF" > /tmp/xray.log 2>&1 &
 sleep 1
 
-exec uvicorn app_xray:app --host "${ADMIN_BIND_HOST:-0.0.0.0}" --port 8000
+exec uvicorn app:app --host "${ADMIN_BIND_HOST:-0.0.0.0}" --port 8000

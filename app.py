@@ -195,7 +195,11 @@ _XRAY_TRAFFIC_ACCUM: Dict[str, Dict[str, int]] = {}
 _XRAY_TRAFFIC_LOCK = threading.Lock()
 XRAY_API_PORT = int(os.environ.get("XRAY_API_PORT", "62789"))
 _XRAY_SYNC_PENDING = False
+_XRAY_SYNC_REPEAT = False
 _XRAY_SYNC_LOCK = threading.Lock()
+_LAST_CLEANUP_DAY = ""
+NAME_RE = re.compile(r"^[\w\s\-\.а-яА-ЯёЁ]+$")
+RATE_RE = re.compile(r"^\d+(kbit|mbit|gbit|kbps|mbps|gbps)$")
 CPU_CACHE: Dict[str, Any] = {"value": None, "ts": 0}
 CPU_CACHE_LOCK = threading.Lock()
 CPU_LAST_SAMPLE = None
@@ -1031,9 +1035,14 @@ def read_rolling_traffic(db, public_key: str, days: int) -> Dict[str, int]:
     return {"rx": int(row[0] or 0), "tx": int(row[1] or 0)}
 
 def cleanup_traffic_db(db) -> None:
+    global _LAST_CLEANUP_DAY
+    today = today_key()
+    if _LAST_CLEANUP_DAY == today:
+        return
     cutoff_day = time.strftime("%Y-%m-%d", time.localtime(time.time() - 180 * 86400))
     db.execute("DELETE FROM traffic_totals WHERE period_type = 'day' AND period_key < ?", (cutoff_day,))
     db.execute("DELETE FROM online_totals WHERE day_key < ?", (cutoff_day,))
+    _LAST_CLEANUP_DAY = today
 
 def get_period_traffic(public_key: str, rx: int, tx: int, online: bool = False) -> Dict[str, Any]:
 
@@ -1378,7 +1387,8 @@ def disable_peer(client_id: str) -> Dict[str, Any]:
         raise HTTPException(status_code=500, detail="Client publicKey not found")
 
     backup_path = f"{CLIENTS_FILE}.bak-{int(time.time())}"
-    shutil.copy2(CLIENTS_FILE, backup_path)
+    if os.path.exists(CLIENTS_FILE):
+        shutil.copy2(CLIENTS_FILE, backup_path)
 
     client["enabled"] = False
 
@@ -1437,7 +1447,8 @@ def enable_peer(client_id: str) -> Dict[str, Any]:
         raise HTTPException(status_code=500, detail="Client preSharedKey not found")
 
     backup_path = f"{CLIENTS_FILE}.bak-{int(time.time())}"
-    shutil.copy2(CLIENTS_FILE, backup_path)
+    if os.path.exists(CLIENTS_FILE):
+        shutil.copy2(CLIENTS_FILE, backup_path)
 
     client["enabled"] = True
 
@@ -1550,7 +1561,8 @@ def create_peer(name: str) -> Dict[str, Any]:
     xray_uuid = str(uuid.uuid4())
 
     backup_path = f"{CLIENTS_FILE}.bak-{int(time.time())}"
-    shutil.copy2(CLIENTS_FILE, backup_path)
+    if os.path.exists(CLIENTS_FILE):
+        shutil.copy2(CLIENTS_FILE, backup_path)
 
     now = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
 
@@ -1639,7 +1651,8 @@ def delete_peer(client_id: str) -> Dict[str, Any]:
         raise HTTPException(status_code=403, detail="Protected peer")
 
     backup_path = f"{CLIENTS_FILE}.bak-{int(time.time())}"
-    shutil.copy2(CLIENTS_FILE, backup_path)
+    if os.path.exists(CLIENTS_FILE):
+        shutil.copy2(CLIENTS_FILE, backup_path)
 
     clients = data.get("clients", {})
     clients.pop(client_id, None)
@@ -1684,7 +1697,7 @@ def get_client_xray_uuid(client_id: str) -> str:
     uuid_file = "/data/uuid"
     if os.path.exists(uuid_file):
         return open(uuid_file).read().strip()
-    return "f98da36f-54b3-419b-8066-db8fa98cb517"
+    raise HTTPException(status_code=404, detail=f"Xray UUID not found for client: {client_id}")
 
 def build_xray_links(client_id: str) -> Dict[str, str]:
     xray_uuid = get_client_xray_uuid(client_id)
@@ -1694,8 +1707,9 @@ def build_xray_links(client_id: str) -> Dict[str, str]:
     if os.path.exists(reality_pub_file):
         pbk = open(reality_pub_file).read().strip()
 
-    host = WG_HOST or "147.45.169.35"
-    short_id = "d64cc26c"
+    host = WG_HOST
+    short_id_file = "/data/reality_short_id"
+    short_id = open(short_id_file).read().strip() if os.path.exists(short_id_file) else "d64cc26c"
 
     links = {
         "reality": f"vless://{xray_uuid}@{host}:443?type=tcp&security=reality&pbk={pbk}&fp=chrome&sni=www.microsoft.com&sid={short_id}&flow=xtls-rprx-vision#REALITY",
@@ -1707,21 +1721,27 @@ def build_xray_links(client_id: str) -> Dict[str, str]:
 XRAY_JSON = "/data/xray.json"
 
 def sync_xray_config_background() -> None:
-    global _XRAY_SYNC_PENDING
+    global _XRAY_SYNC_PENDING, _XRAY_SYNC_REPEAT
     with _XRAY_SYNC_LOCK:
         if _XRAY_SYNC_PENDING:
+            _XRAY_SYNC_REPEAT = True
             return
         _XRAY_SYNC_PENDING = True
+        _XRAY_SYNC_REPEAT = False
     threading.Thread(target=_sync_xray_config_locked, daemon=True).start()
 
 def _sync_xray_config_locked() -> None:
-    global _XRAY_SYNC_PENDING
+    global _XRAY_SYNC_PENDING, _XRAY_SYNC_REPEAT
     try:
         sync_xray_config()
     except Exception as e:
         print(f"[xray] sync_xray_config error: {e}", flush=True)
     finally:
         with _XRAY_SYNC_LOCK:
+            if _XRAY_SYNC_REPEAT:
+                _XRAY_SYNC_REPEAT = False
+                threading.Thread(target=_sync_xray_config_locked, daemon=True).start()
+                return
             _XRAY_SYNC_PENDING = False
 
 def sync_xray_config():
@@ -1772,11 +1792,12 @@ def sync_xray_config():
         if pid:
             subprocess.run(["kill", pid], capture_output=True)
             time.sleep(0.3)
-        subprocess.Popen(
-            ["xray", "run", "-c", XRAY_JSON],
-            stdout=open("/tmp/xray.log", "a"),
-            stderr=subprocess.STDOUT,
-        )
+        with open("/tmp/xray.log", "a") as log_f:
+            subprocess.Popen(
+                ["xray", "run", "-c", XRAY_JSON],
+                stdout=log_f,
+                stderr=subprocess.STDOUT,
+            )
     except Exception as e:
         print(f"[sync_xray_config] error: {e}", flush=True)
 
@@ -1926,6 +1947,24 @@ def get_uptime() -> Dict[str, Any]:
 
 # ── Auth middleware ──────────────────────────────────────────
 PUBLIC_PATHS = {"/", "/app.js", "/app.css", "/sw.js", "/manifest.json", "/health"}
+_ADMIN_IPS_CACHE: Dict[str, Any] = {"ips": set(), "ts": 0}
+_ADMIN_IPS_CACHE_TTL = 5
+
+def _load_admin_ips() -> set:
+    now = time.time()
+    if now - _ADMIN_IPS_CACHE["ts"] < _ADMIN_IPS_CACHE_TTL:
+        return _ADMIN_IPS_CACHE["ips"]
+    ips: set = set()
+    try:
+        data = read_clients_data()
+        for client in data.get("clients", {}).values():
+            if client.get("role") == "admin" and client.get("address"):
+                ips.add(str(client["address"]))
+    except Exception:
+        pass
+    _ADMIN_IPS_CACHE["ips"] = ips
+    _ADMIN_IPS_CACHE["ts"] = now
+    return ips
 
 @app.middleware("http")
 async def auth_middleware(request: Request, call_next):
@@ -1936,13 +1975,8 @@ async def auth_middleware(request: Request, call_next):
     if client_ip == "10.8.0.1":
         return await call_next(request)
 
-    try:
-        data = read_clients_data()
-        for c, client in data.get("clients", {}).items():
-            if client.get("role") == "admin" and client.get("address") == client_ip:
-                return await call_next(request)
-    except Exception:
-        pass
+    if client_ip in _load_admin_ips():
+        return await call_next(request)
 
     x_api_token = request.headers.get("x-api-token")
     if x_api_token:
@@ -2262,9 +2296,6 @@ def peer_rename(client_id: str, payload: Dict[str, Any] = Body(default={}), x_ap
     atomic_json_write(CLIENTS_FILE, data, backup=True)
     log_activity(action="rename", peer=old_name, client_id=client_id, ip=client.get("address", ""), details={"old_name": old_name, "new_name": new_name})
     return {"ok": True, "client_id": client_id, "name": new_name}
-
-NAME_RE = re.compile(r"^[\w\s\-\.а-яА-ЯёЁ]+$")
-RATE_RE = re.compile(r"^\d+(kbit|mbit|gbit|kbps|mbps|gbps)$")
 
 def validate_rate(raw: Any) -> str:
     s = str(raw).strip().lower() if raw else "256kbit"
