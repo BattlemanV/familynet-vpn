@@ -11,6 +11,7 @@ import threading
 import time
 import secrets
 import uuid
+import urllib.request
 from typing import Any, Dict, List, Optional
 
 import qrcode
@@ -175,6 +176,57 @@ def _get_hostname() -> str:
     if env_name:
         return env_name
     return socket.gethostname()
+
+_location_cache: Optional[Dict[str, str]] = None
+
+def _detect_location() -> Dict[str, str]:
+    """Auto-detect server location/country from public IP via ip-api.com.
+    Falls back to SERVER_LOCATION / SERVER_LOCATION_COUNTRY env vars,
+    then to hostname prefix matching."""
+    global _location_cache
+    if _location_cache is not None:
+        return _location_cache
+
+    env_loc = os.environ.get("SERVER_LOCATION", "").strip()
+    env_cc = os.environ.get("SERVER_LOCATION_COUNTRY", "").strip()
+    if env_loc and env_cc:
+        _location_cache = {"location": env_loc, "country": env_cc}
+        return _location_cache
+
+    try:
+        with urllib.request.urlopen("http://ip-api.com/json/", timeout=5) as r:
+            data = json.loads(r.read())
+            if data.get("status") == "success":
+                city = (data.get("city") or "").strip()
+                cc = (data.get("countryCode") or "").strip()
+                if city and cc:
+                    _location_cache = {"location": city, "country": cc}
+                    return _location_cache
+    except Exception:
+        pass
+
+    hn = socket.gethostname().lower()
+    prefixes = {
+        "ams": ("Amsterdam", "NL"), "fra": ("Frankfurt", "DE"),
+        "waw": ("Warsaw", "PL"), "lon": ("London", "GB"),
+        "hel": ("Helsinki", "FI"), "sto": ("Stockholm", "SE"),
+        "rig": ("Riga", "LV"), "tll": ("Tallinn", "EE"),
+        "vie": ("Vienna", "AT"), "par": ("Paris", "FR"),
+        "ber": ("Berlin", "DE"), "pra": ("Prague", "CZ"),
+    }
+    for pre, (city, cc) in prefixes.items():
+        if hn.startswith(pre):
+            _location_cache = {"location": city, "country": cc}
+            return _location_cache
+
+    _location_cache = {"location": "", "country": ""}
+    return _location_cache
+
+def _get_location() -> str:
+    return _detect_location()["location"]
+
+def _get_location_country() -> str:
+    return _detect_location()["country"]
 
 WG_HOST = os.environ.get("WG_HOST")
 if not WG_HOST:
@@ -2731,6 +2783,8 @@ def dashboard(x_api_token: Optional[str] = Header(default=None)) -> Dict[str, An
     return {
         "variant": WG_VARIANT,
         "hostname": _get_hostname(),
+        "location": _get_location(),
+        "location_country": _get_location_country(),
         "uptime": get_uptime(),
         "cpu": get_cpu_usage(),
         "loadavg": get_loadavg(),
